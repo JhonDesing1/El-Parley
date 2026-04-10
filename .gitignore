@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# env files - NEVER commit real secrets
+.env
+.env*.local
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+*.swp
+*.swo
+
+# supabase cli temp files
+supabase/.temp/
+
+# claude code local settings
+.claude/
