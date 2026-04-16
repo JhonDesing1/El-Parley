@@ -1,221 +1,236 @@
-import Link from "next/link";
-import { Check, Sparkles, Zap, Crown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils/cn";
+"use client"
 
-export const metadata = {
-  title: "Premium — El Parley",
-  description:
-    "Desbloquea value bets exclusivas, parlays VIP, ROI tracking y alertas push. Desde $19.900 COP/mes.",
-  openGraph: {
-    title: "Premium — El Parley",
-    description:
-      "Desbloquea value bets exclusivas, parlays VIP, ROI tracking y alertas push. Desde $19.900 COP/mes.",
-  },
-};
+import { useState } from "react"
+import { Check, X, Zap, Crown, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 
-const PLANS = [
+const plans = [
   {
-    id: "free",
-    name: "Free",
-    icon: Sparkles,
-    priceCOP: "Gratis",
-    priceUSD: "$0",
-    description: "Lo esencial para empezar",
+    name: "Gratis",
+    icon: Zap,
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    description: "Perfecto para comenzar a explorar el mundo del betting inteligente",
     features: [
-      "Cuotas en vivo de todas las casas",
-      "1 parlay del día gratis",
-      "Estadísticas básicas",
-      "Detección de value bets (delay 30 min)",
+      { name: "Value bets básicas (6/día)", included: true },
+      { name: "Comparador de cuotas", included: true },
+      { name: "Partidos del día", included: true },
+      { name: "Value bets ilimitadas", included: false },
+      { name: "Parlays generados por IA", included: false },
+      { name: "Alertas por Telegram", included: false },
+      { name: "Kelly calculator", included: false },
+      { name: "Backtesting", included: false },
     ],
     cta: "Empezar gratis",
-    ctaHref: "/register",
-    highlight: false,
-    payuHref: null,
-    pseHref: null,
-    stripeHref: null,
+    ctaLink: "/register",
+    highlighted: false,
+    badge: null,
   },
   {
-    id: "premium",
     name: "Premium",
-    icon: Zap,
-    priceCOP: "$30.000",
-    priceUSD: null,
-    period: "/mes",
-    description: "Para apostadores serios",
+    icon: Crown,
+    monthlyPrice: 19900,
+    yearlyPrice: Math.round(19900 * 12 * 0.8),
+    description: "Para apostadores serios que buscan ventaja competitiva",
     features: [
-      "Todo lo del plan Free",
-      "Value bets en tiempo real (sin delay)",
-      "Hasta 10 parlays VIP al día",
-      "Historial de ROI auditado",
-      "Alertas push instantáneas",
-      "Análisis xG y modelos avanzados",
-      "Sin publicidad",
+      { name: "Value bets básicas (6/día)", included: true },
+      { name: "Comparador de cuotas", included: true },
+      { name: "Partidos del día", included: true },
+      { name: "Value bets ilimitadas", included: true },
+      { name: "Parlays generados por IA", included: true },
+      { name: "Alertas por Telegram", included: true },
+      { name: "Kelly calculator", included: true },
+      { name: "Backtesting", included: true },
+      { name: "Badge Premium", included: true },
     ],
-    cta: null,
-    ctaHref: null,
-    mpHref: "/api/checkout-mp?plan=monthly",
-    mpYearlyHref: "/api/checkout-mp?plan=yearly",
-    mpYearlyPrice: "$300.000",
-    highlight: true,
+    cta: "Suscribirse",
+    ctaLink: "/api/checkout-mp?plan=monthly",
+    highlighted: true,
+    badge: "Más popular",
   },
   {
-    id: "pro",
     name: "Pro",
-    icon: Crown,
-    priceCOP: "Próximamente",
-    priceUSD: null,
-    period: null,
-    description: "Para profesionales y traders",
+    icon: Sparkles,
+    monthlyPrice: 39900,
+    yearlyPrice: Math.round(39900 * 12 * 0.8),
+    description: "Acceso completo con herramientas profesionales y soporte dedicado",
     features: [
-      "Todo lo del plan Premium",
-      "Acceso a la API REST personal",
-      "Backtesting histórico ilimitado",
-      "Bot de Telegram con alertas",
-      "Soporte prioritario",
-      "Webhooks personalizados",
+      { name: "Value bets básicas (6/día)", included: true },
+      { name: "Comparador de cuotas", included: true },
+      { name: "Partidos del día", included: true },
+      { name: "Value bets ilimitadas", included: true },
+      { name: "Parlays generados por IA", included: true },
+      { name: "Alertas por Telegram", included: true },
+      { name: "Kelly calculator", included: true },
+      { name: "Backtesting", included: true },
+      { name: "Badge PRO dorado", included: true },
+      { name: "API access", included: true },
+      { name: "Soporte prioritario", included: true },
     ],
     cta: "Próximamente",
-    ctaHref: "#",
-    mpHref: null,
-    mpYearlyHref: null,
-    mpYearlyPrice: null,
-    highlight: false,
+    ctaLink: "#",
+    highlighted: false,
+    badge: null,
   },
-];
+]
 
-export default async function PremiumPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string>>;
-}) {
-  const params = await searchParams;
+function formatPrice(price: number): string {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(price)
+}
+
+export default function PricingPage() {
+  const [isYearly, setIsYearly] = useState(false)
 
   return (
-    <div className="container max-w-6xl py-12">
-      {params.payment === "declined" && (
-        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          El pago fue rechazado. Verifica los datos de tu tarjeta e inténtalo de nuevo.
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
+            Precios de{" "}
+            <span className="bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent">
+              El Parley
+            </span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-zinc-400">
+            Elige el plan que mejor se adapte a tu estilo de apuestas. Cancela cuando quieras.
+          </p>
         </div>
-      )}
-      {params.payment === "error" && (
-        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          Ocurrió un error procesando el pago. Intenta de nuevo o contacta soporte.
+
+        {/* Billing Toggle */}
+        <div className="mt-10 flex items-center justify-center gap-4">
+          <span className={`text-sm font-medium ${!isYearly ? "text-white" : "text-zinc-500"}`}>
+            Mensual
+          </span>
+          <Switch
+            checked={isYearly}
+            onCheckedChange={setIsYearly}
+            className="data-[state=checked]:bg-amber-500"
+          />
+          <span className={`text-sm font-medium ${isYearly ? "text-white" : "text-zinc-500"}`}>
+            Anual
+          </span>
+          <Badge className="ml-2 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20">
+            Ahorra 20%
+          </Badge>
         </div>
-      )}
-      {params.error === "invalid" && (
-        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-400">
-          No pudimos verificar la respuesta de PayU. Si realizaste un pago, espera unos minutos y revisa tu dashboard.
-        </div>
-      )}
 
-      <header className="mx-auto mb-12 max-w-2xl text-center">
-        <Badge variant="value" className="mb-4">
-          PREMIUM
-        </Badge>
-        <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-          Convierte el azar en estadística
-        </h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          Nuestros suscriptores premium tienen acceso a las mismas herramientas que usan
-          los apostadores profesionales: edge matemático, Kelly staking y alertas en vivo.
-        </p>
-      </header>
+        {/* Pricing Cards */}
+        <div className="mt-12 grid gap-8 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const Icon = plan.icon
+            const price = isYearly ? plan.yearlyPrice / 12 : plan.monthlyPrice
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {PLANS.map((plan) => {
-          const Icon = plan.icon;
-          return (
-            <Card
-              key={plan.id}
-              className={cn(
-                "relative flex flex-col p-6",
-                plan.highlight && "border-value/50 ring-1 ring-value/30 shadow-[0_0_60px_-15px_hsl(var(--value))]",
-              )}
-            >
-              {plan.highlight && (
-                <Badge variant="value" className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  MÁS POPULAR
-                </Badge>
-              )}
-              {plan.id === "pro" && (
-                <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 border-amber-500/50 bg-amber-500/10 text-amber-400">
-                  NUEVO
-                </Badge>
-              )}
-
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-                <Icon className="h-6 w-6" />
-              </div>
-
-              <h3 className="font-display text-2xl font-bold">{plan.name}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
-
-              <div className="mt-6">
-                <div className="flex items-baseline gap-1">
-                  <span className="font-display text-4xl font-bold tabular-nums">
-                    {plan.priceCOP}
-                  </span>
-                  {plan.period && (
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
-                  )}
-                </div>
-                {plan.id !== "free" && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    o {plan.priceUSD} USD · PayU / Stripe
+            return (
+              <Card
+                key={plan.name}
+                className={`relative flex flex-col border-2 bg-zinc-900/50 backdrop-blur ${
+                  plan.highlighted
+                    ? "border-amber-500 shadow-lg shadow-amber-500/20"
+                    : "border-zinc-800"
+                }`}
+              >
+                {plan.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="border-amber-500 bg-amber-500 px-4 py-1 text-sm font-semibold text-zinc-950 hover:bg-amber-600">
+                      {plan.badge}
+                    </Badge>
                   </div>
                 )}
-              </div>
 
-              <ul className="mt-6 flex-1 space-y-3">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-value" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
+                <CardHeader className="pb-4 pt-8">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                        plan.highlighted
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="text-xl text-white">{plan.name}</CardTitle>
+                  </div>
+                  <CardDescription className="mt-3 text-zinc-400">
+                    {plan.description}
+                  </CardDescription>
+                </CardHeader>
 
-              {plan.mpHref ? (
-                <div className="mt-6 flex flex-col gap-2">
-                  <Button asChild variant="value" size="lg" className="w-full">
-                    <Link href={plan.mpHref}>Pagar mensual · $30.000 COP</Link>
+                <CardContent className="flex-1">
+                  <div className="mb-6">
+                    <div className="flex items-baseline">
+                      <span className="text-4xl font-bold text-white">
+                        {price === 0 ? "Gratis" : formatPrice(Math.round(price))}
+                      </span>
+                      {price > 0 && <span className="ml-2 text-zinc-500">/mes</span>}
+                    </div>
+                    {isYearly && price > 0 && (
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Facturado como {formatPrice(plan.yearlyPrice)}/año
+                      </p>
+                    )}
+                  </div>
+
+                  <ul className="space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature.name} className="flex items-start gap-3">
+                        {feature.included ? (
+                          <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+                        ) : (
+                          <X className="mt-0.5 h-5 w-5 shrink-0 text-zinc-600" />
+                        )}
+                        <span className={feature.included ? "text-zinc-300" : "text-zinc-600"}>
+                          {feature.name}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+
+                <CardFooter className="pt-4">
+                  <Button
+                    asChild
+                    disabled={plan.ctaLink === "#"}
+                    className={`w-full ${
+                      plan.highlighted
+                        ? "bg-amber-500 text-zinc-950 hover:bg-amber-600"
+                        : "bg-zinc-800 text-white hover:bg-zinc-700"
+                    }`}
+                  >
+                    <a href={plan.ctaLink}>{plan.cta}</a>
                   </Button>
-                  {plan.mpYearlyHref && plan.mpYearlyPrice && (
-                    <Button asChild variant="outline" size="sm" className="w-full">
-                      <Link href={plan.mpYearlyHref}>
-                        Pagar anual · {plan.mpYearlyPrice} COP
-                        <span className="ml-1 text-xs text-value">(ahorra 17%)</span>
-                      </Link>
-                    </Button>
-                  )}
-                  <p className="text-center text-xs text-muted-foreground">
-                    Vía Mercado Pago · Tarjeta, Nequi, PSE
-                  </p>
-                </div>
-              ) : (
-                <Button
-                  asChild
-                  variant={plan.highlight ? "value" : "outline"}
-                  size="lg"
-                  className="mt-6 w-full"
-                  disabled={plan.ctaHref === "#"}
-                >
-                  <Link href={plan.ctaHref ?? "#"}>{plan.cta}</Link>
-                </Button>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+                </CardFooter>
+              </Card>
+            )
+          })}
+        </div>
 
-      <div className="mx-auto mt-16 max-w-2xl text-center">
-        <p className="text-sm text-muted-foreground">
-          🇨🇴 Tarjeta / Nequi / PSE vía Mercado Pago · Cancela en cualquier momento · 7 días de garantía
-        </p>
+        {/* Trust indicators */}
+        <div className="mt-16 text-center">
+          <p className="text-sm text-zinc-500">
+            ¿Tienes preguntas? Escríbenos a{" "}
+            <a
+              href="mailto:soporte@elparley.co"
+              className="text-amber-400 underline-offset-4 hover:underline"
+            >
+              soporte@elparley.co
+            </a>
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-6 text-xs text-zinc-600">
+            <span>🇨🇴 Nequi · PSE · Tarjeta vía Mercado Pago</span>
+            <span>✅ Cancela cuando quieras</span>
+            <span>🔒 Pago seguro</span>
+          </div>
+        </div>
       </div>
     </div>
-  );
+  )
 }
