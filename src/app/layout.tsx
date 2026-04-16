@@ -2,7 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { Archivo, Manrope, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { Suspense } from "react";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { PostHogProvider, PostHogPageView } from "@/components/providers/posthog-provider";
+import { OneSignalProvider } from "@/components/providers/onesignal-provider";
 import { siteConfig } from "@/config/site";
 import "./globals.css";
 
@@ -59,7 +62,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0f1c" },
+    { media: "(prefers-color-scheme: dark)", color: "#060810" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -73,12 +76,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${archivo.variable} ${manrope.variable} ${jetbrains.variable}`}
     >
       <body className="font-sans">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <QueryProvider>
-            {children}
-            <Toaster position="top-right" theme="dark" richColors />
-          </QueryProvider>
-        </ThemeProvider>
+        <PostHogProvider>
+          <OneSignalProvider>
+            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+              <QueryProvider>
+                <Suspense fallback={null}>
+                  <PostHogPageView />
+                </Suspense>
+                {children}
+                <Toaster position="top-right" theme="dark" richColors />
+              </QueryProvider>
+            </ThemeProvider>
+          </OneSignalProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

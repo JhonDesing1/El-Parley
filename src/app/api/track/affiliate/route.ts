@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import { buildAffiliateUrl, BOOKMAKERS } from "@/config/bookmakers";
+import { captureServer } from "@/lib/analytics/posthog";
 
 /**
  * GET /api/track/affiliate?book=betplay&match=123&source=match_detail
@@ -38,12 +39,22 @@ export async function GET(req: NextRequest) {
     .digest("hex");
 
   // Fire-and-forget: no bloqueamos el redirect
-  void supabase.from("affiliate_clicks").insert({
-    bookmaker_id: bookmakerRow?.id ?? null,
-    match_id: matchId ? Number(matchId) : null,
+  if (bookmakerRow?.id) {
+    void supabase.from("affiliate_clicks").insert({
+      bookmaker_id: bookmakerRow.id,
+      match_id: matchId ? Number(matchId) : null,
+      source,
+      ip_hash: ipHash,
+      user_agent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
+      country: req.headers.get("x-vercel-ip-country") ?? "CO",
+    });
+  }
+
+  // PostHog server-side event
+  captureServer(ipHash, "affiliate_link_clicked", {
+    bookmaker: book,
+    match_id: matchId,
     source,
-    ip_hash: ipHash,
-    user_agent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
     country: req.headers.get("x-vercel-ip-country") ?? "CO",
   });
 

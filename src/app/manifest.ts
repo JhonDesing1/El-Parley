@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "ApuestaValue — Value Betting LATAM",
-    short_name: "ApuestaValue",
+    name: "El Parley — Value Betting LATAM",
+    short_name: "El Parley",
     description:
       "Cuotas en vivo, value bets matemáticas y parlays de alta probabilidad para Colombia y LATAM.",
     start_url: "/",
@@ -13,10 +13,10 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     categories: ["sports", "finance", "entertainment"],
     icons: [
-      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { src: "/api/icons/192", sizes: "192x192", type: "image/png" },
+      { src: "/api/icons/512", sizes: "512x512", type: "image/png" },
       {
-        src: "/icons/maskable-512.png",
+        src: "/api/icons/512",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

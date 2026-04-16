@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://apuestavalue.com";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://elparley.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createAdminClient();
@@ -11,7 +11,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/parlays`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE}/premium`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/blog`, changeFrequency: "daily", priority: 0.8 },
-    { url: `${SITE}/leaderboard`, changeFrequency: "daily", priority: 0.6 },
   ];
 
   const { data: matches } = await supabase
@@ -36,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const blogUrls: MetadataRoute.Sitemap = (posts ?? []).map((p) => ({
     url: `${SITE}/blog/${p.slug}`,
-    lastModified: new Date(p.updated_at),
+    lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
     changeFrequency: "weekly",
     priority: 0.5,
   }));

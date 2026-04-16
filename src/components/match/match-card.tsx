@@ -20,7 +20,7 @@ export function MatchCard({ match, className }: MatchCardProps) {
     <Link
       href={`/partido/${match.id}`}
       className={cn(
-        "group relative block overflow-hidden rounded-xl border border-border/60 bg-card p-4 transition-all hover:border-value/40 hover:shadow-[0_0_30px_-12px_hsl(var(--value))]",
+        "group relative block overflow-hidden rounded-xl border border-border/60 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-[0_0_32px_-10px_hsl(var(--primary)/0.5)]",
         className,
       )}
     >
@@ -33,6 +33,7 @@ export function MatchCard({ match, className }: MatchCardProps) {
               alt={match.league.name}
               width={16}
               height={16}
+              sizes="16px"
               className="object-contain"
             />
           )}
@@ -40,7 +41,7 @@ export function MatchCard({ match, className }: MatchCardProps) {
             {match.league.name}
           </span>
         </div>
-        {isLive && <Badge variant="live">EN VIVO · {match.minute}'</Badge>}
+        {isLive && <Badge variant="live">EN VIVO · {match.minute}&apos;</Badge>}
         {match.has_value_bet && !isFinished && (
           <Badge variant="value" className="gap-1">
             <Sparkles className="h-3 w-3" />
@@ -100,7 +101,7 @@ function TeamRow({
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
         {logo ? (
-          <Image src={logo} alt={name} width={24} height={24} className="object-contain" />
+          <Image src={logo} alt={name} width={24} height={24} sizes="24px" className="object-contain" />
         ) : (
           <div className="h-6 w-6 rounded-full bg-muted" />
         )}
@@ -125,7 +126,7 @@ function OddsRow({ odds }: { odds: { home?: number; draw?: number; away?: number
 
 function OddCell({ label, value }: { label: string; value?: number }) {
   return (
-    <div className="rounded-md bg-muted/50 px-2 py-1.5 text-center transition-colors group-hover:bg-muted">
+    <div className="rounded-md bg-muted/50 px-2 py-1.5 text-center transition-colors group-hover:bg-primary/8 group-hover:ring-1 group-hover:ring-primary/20">
       <div className="text-[10px] font-bold text-muted-foreground">{label}</div>
       <div className="font-mono text-sm font-bold tabular-nums">
         {value?.toFixed(2) ?? "-"}

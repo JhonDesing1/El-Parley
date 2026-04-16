@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ApuestaValue** is a full-stack sports betting value detection platform targeting Colombia/LATAM. It identifies mathematically profitable betting opportunities (value bets) and curated parlays across multiple bookmakers.
+**El Parley** is a full-stack sports betting value detection platform targeting Colombia/LATAM. It identifies mathematically profitable betting opportunities (value bets) and curated parlays across multiple bookmakers.
 
 **Stack:** Next.js 15 (App Router) + TypeScript + Supabase + Tailwind/Shadcn + TanStack Query v5
 

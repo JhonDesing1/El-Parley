@@ -30,6 +30,11 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 
+# documents
+*.docx
+*.xlsx
+*.pdf
+
 # editor
 .vscode/
 *.swp
@@ -40,3 +45,5 @@ supabase/.temp/
 
 # claude code local settings
 .claude/
+
+.vercel

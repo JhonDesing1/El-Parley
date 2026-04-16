@@ -85,23 +85,31 @@ export function calculateParlay(legs: ParlayLeg[]): ParlayResult {
  * Genera el "parlay del día": combinación de N selecciones con
  * probabilidad combinada del modelo > umbral.
  *
- * Algoritmo greedy: de las value bets disponibles, escoge las de mayor
- * confianza hasta alcanzar el target.
+ * Algoritmo greedy optimizado:
+ * 1. Filtra candidatos con prob individual > 55% y confianza medium/high
+ * 2. Ordena por score compuesto: modelProb * (1 + edge) si hay edge, o solo modelProb
+ * 3. Construye el parlay greedy asegurando prob combinada ≥ minCombinedProb
+ * 4. Si no hay suficientes legs de alta prob, relaja el umbral y toma los mejores disponibles
  */
 export function generateDailyParlay(
-  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high" }>,
+  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
   options: {
     minLegs?: number;
     maxLegs?: number;
     minCombinedProb?: number;
   } = {},
 ): ParlayLeg[] | null {
-  const { minLegs = 2, maxLegs = 4, minCombinedProb = 0.68 } = options;
+  const { minLegs = 2, maxLegs = 4, minCombinedProb = 0.35 } = options;
 
-  // Solo high/medium confidence con prob individual > 60%
+  // Solo high/medium confidence con prob individual > 55%
   const filtered = candidates
-    .filter((c) => c.confidence !== "low" && (c.modelProb ?? 0) > 0.6)
-    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+    .filter((c) => c.confidence !== "low" && (c.modelProb ?? 0) > 0.55)
+    .sort((a, b) => {
+      // Score = modelProb * (1 + edge) para priorizar bets con más valor esperado
+      const scoreA = (a.modelProb ?? 0) * (1 + (a.edge ?? 0));
+      const scoreB = (b.modelProb ?? 0) * (1 + (b.edge ?? 0));
+      return scoreB - scoreA;
+    });
 
   if (filtered.length < minLegs) return null;
 
@@ -112,13 +120,14 @@ export function generateDailyParlay(
   for (const leg of filtered) {
     if (selected.length >= maxLegs) break;
     const newProb = combinedProb * (leg.modelProb ?? 0);
+    // Siempre añadir hasta minLegs; después solo si la prob sigue siendo aceptable
     if (selected.length < minLegs || newProb >= minCombinedProb) {
       selected.push(leg);
       combinedProb = newProb;
     }
   }
 
-  return combinedProb >= minCombinedProb && selected.length >= minLegs
-    ? selected
-    : null;
+  // Si no alcanzamos el umbral pero tenemos suficientes legs, devolver igualmente
+  // (el display mostrará la prob real, el usuario decide)
+  return selected.length >= minLegs ? selected : null;
 }

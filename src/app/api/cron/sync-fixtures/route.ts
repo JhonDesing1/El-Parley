@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchFixturesForLeague, fetchPredictionsForFixture } from "@/lib/api/api-football";
+import { fetchFixturesForLeague, fetchPredictionsForFixture, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -37,12 +37,20 @@ export async function GET(req: NextRequest) {
   const from = new Date().toISOString().slice(0, 10);
   const to = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
+  // Process high-priority leagues first to ensure Champions/World Cup data is
+  // always fresh even if the cron hits the runtime limit.
+  const sortedLeagues = [...leagues].sort((a, b) => {
+    const aHigh = HIGH_PRIORITY_LEAGUE_IDS.includes(a.id) ? 0 : 1;
+    const bHigh = HIGH_PRIORITY_LEAGUE_IDS.includes(b.id) ? 0 : 1;
+    return aHigh - bHigh;
+  });
+
   let totalFixtures = 0;
   let totalTeams = 0;
 
   const debug: any[] = [];
 
-  for (const league of leagues) {
+  for (const league of sortedLeagues) {
     try {
       const { fixtures, teams } = await fetchFixturesForLeague(
         league.id,
@@ -71,22 +79,33 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Paso 2: poblar xG para partidos próximos 48h sin datos ──────
+  // ── Paso 2: poblar xG para partidos próximos 72h sin datos ──────
+  // 72h (en lugar de 48h) para que Champions/Mundial tengan xG disponible
+  // con más anticipación — el cron de sync-live-odds lo necesita para
+  // detectar value bets en tiempo real.
   // Solo pide predicciones para fixtures que aún no las tienen,
   // para no quemar el límite de 100 req/día de la API.
-  const in48h = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+  // Prioridad: ligas de alto tráfico primero.
+  const in72h = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
   const { data: needsXg } = await supabase
     .from("matches")
-    .select("id")
+    .select("id, league_id")
     .gte("kickoff", new Date().toISOString())
-    .lte("kickoff", in48h)
+    .lte("kickoff", in72h)
     .eq("status", "scheduled")
     .is("model_expected_goals_home", null);
 
   let xgUpdated = 0;
 
   if (needsXg?.length) {
-    for (const match of needsXg) {
+    // High-priority leagues get xG first
+    const sortedNeedsXg = [...needsXg].sort((a, b) => {
+      const aHigh = HIGH_PRIORITY_LEAGUE_IDS.includes(a.league_id ?? 0) ? 0 : 1;
+      const bHigh = HIGH_PRIORITY_LEAGUE_IDS.includes(b.league_id ?? 0) ? 0 : 1;
+      return aHigh - bHigh;
+    });
+
+    for (const match of sortedNeedsXg) {
       try {
         const preds = await fetchPredictionsForFixture(match.id);
         if (!preds) continue;

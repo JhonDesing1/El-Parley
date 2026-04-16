@@ -53,6 +53,6 @@ export const BOOKMAKERS: Record<string, BookmakerConfig> = {
 export function buildAffiliateUrl(slug: string): string {
   const cfg = BOOKMAKERS[slug];
   if (!cfg) return "#";
-  const tag = process.env[cfg.envTag] ?? "apuestavalue";
+  const tag = process.env[cfg.envTag] ?? "El Parley";
   return `${cfg.affiliateBase}${tag}`;
 }

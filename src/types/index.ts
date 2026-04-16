@@ -60,6 +60,7 @@ export interface Odd {
   market: MarketType;
   selection: string;
   price: number;
+  previous_price?: number | null;
   line?: number;
   is_live: boolean;
   updated_at: string;
@@ -102,4 +103,14 @@ export interface Parlay {
   status: "pending" | "won" | "lost" | "void" | "partial";
   legs: ParlayLeg[];
   created_at: string;
+}
+
+export interface NewsArticle {
+  title: string;
+  description: string | null;
+  url: string;
+  urlToImage: string | null;
+  publishedAt: string;
+  source: { name: string };
+  author: string | null;
 }

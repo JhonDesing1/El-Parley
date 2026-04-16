@@ -1,11 +1,11 @@
-# ⚡ ApuestaValue
+# ⚡ El Parley
 
 > **La plataforma de Value Betting #1 para Colombia y LATAM.**
 > Comparador de cuotas, detección matemática de value bets y parlays de alta probabilidad para Betplay, Wplay, Codere, Rivalo y más.
 
 ## 🎯 Propuesta
 
-A diferencia de tipsters de Telegram, **ApuestaValue no adivina**: calcula la probabilidad implícita de cada cuota y la compara contra un modelo Poisson ajustado por xG. Solo marca como *value bet* selecciones con **edge matemático ≥ 3%**.
+A diferencia de tipsters de Telegram, **El Parley no adivina**: calcula la probabilidad implícita de cada cuota y la compara contra un modelo Poisson ajustado por xG. Solo marca como *value bet* selecciones con **edge matemático ≥ 3%**.
 
 ## 💰 Modelo de ingresos
 

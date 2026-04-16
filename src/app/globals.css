@@ -4,57 +4,57 @@
 
 @layer base {
   :root {
-    /* LIGHT — secundario, dark es el default */
+    /* LIGHT — modo secundario */
     --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
+    --foreground: 224 20% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
+    --card-foreground: 224 20% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
-    --primary: 142 76% 36%;
+    --popover-foreground: 224 20% 8%;
+    --primary: 43 85% 42%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
+    --secondary: 45 20% 94%;
+    --secondary-foreground: 224 20% 10%;
+    --muted: 45 15% 94%;
+    --muted-foreground: 224 10% 46%;
+    --accent: 45 20% 94%;
+    --accent-foreground: 224 20% 10%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 142 76% 36%;
-    --value: 84 81% 44%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 43 85% 42%;
+    --value: 152 72% 36%;
     --live: 0 84% 60%;
-    --win: 142 76% 36%;
+    --win: 152 72% 36%;
     --loss: 0 84% 60%;
     --radius: 0.75rem;
   }
 
   .dark {
-    /* DARK — el modo principal del producto */
-    --background: 222 47% 6%;            /* casi negro azulado */
-    --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 7%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 142 76% 45%;              /* verde Betplay-ish */
-    --primary-foreground: 222 47% 6%;
-    --secondary: 222 47% 14%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 222 47% 12%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 222 47% 14%;
-    --accent-foreground: 210 40% 98%;
+    /* DARK — modo principal: abundancia y dinero */
+    --background: 220 28% 4%;          /* negro profundo, ligeramente frío */
+    --foreground: 45 35% 94%;          /* blanco cálido / crema */
+    --card: 220 25% 7%;                /* superficie de tarjeta oscura */
+    --card-foreground: 45 35% 94%;
+    --popover: 220 25% 6%;
+    --popover-foreground: 45 35% 94%;
+    --primary: 43 92% 52%;             /* ORO — riqueza, abundancia */
+    --primary-foreground: 220 28% 5%;  /* texto oscuro sobre oro */
+    --secondary: 220 22% 12%;
+    --secondary-foreground: 45 30% 88%;
+    --muted: 220 22% 10%;
+    --muted-foreground: 220 12% 58%;
+    --accent: 220 22% 12%;
+    --accent-foreground: 45 35% 94%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 222 47% 16%;
-    --input: 222 47% 16%;
-    --ring: 142 76% 45%;
-    --value: 84 100% 55%;                /* lima neón para value bets */
+    --destructive-foreground: 45 35% 94%;
+    --border: 220 20% 14%;
+    --input: 220 20% 14%;
+    --ring: 43 92% 52%;                /* ring dorado */
+    --value: 152 72% 44%;              /* ESMERALDA — profit, crecimiento */
     --live: 0 84% 60%;
-    --win: 142 76% 45%;
+    --win: 152 72% 44%;
     --loss: 0 84% 60%;
   }
 
@@ -69,6 +69,81 @@
 @layer utilities {
   .text-balance { text-wrap: balance; }
 
+  /* Entrada: fade + slide-up escalonado */
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Fade simple para elementos de fondo */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 1s ease-out both;
+  }
+
+  /* ── Orbs: trayectorias de deriva independientes ── */
+  @keyframes orb-drift-a {
+    0%   { transform: translate(0px, 0px) scale(1); }
+    25%  { transform: translate(50px, -40px) scale(1.06); }
+    50%  { transform: translate(20px, -70px) scale(0.96); }
+    75%  { transform: translate(-30px, -30px) scale(1.03); }
+    100% { transform: translate(0px, 0px) scale(1); }
+  }
+  @keyframes orb-drift-b {
+    0%   { transform: translate(0px, 0px) scale(1); }
+    25%  { transform: translate(-60px, 40px) scale(1.08); }
+    50%  { transform: translate(-20px, 80px) scale(0.94); }
+    75%  { transform: translate(40px, 50px) scale(1.04); }
+    100% { transform: translate(0px, 0px) scale(1); }
+  }
+  @keyframes orb-drift-c {
+    0%   { transform: translate(0px, 0px) scale(1); }
+    33%  { transform: translate(35px, 55px) scale(1.1); }
+    66%  { transform: translate(-45px, 25px) scale(0.92); }
+    100% { transform: translate(0px, 0px) scale(1); }
+  }
+
+  /* Banda aurora: sweep horizontal + fade */
+  @keyframes aurora-sweep {
+    0%   { opacity: 0.07; transform: scaleX(0.85) translateX(-6%); }
+    40%  { opacity: 0.18; transform: scaleX(1.08) translateX(4%); }
+    100% { opacity: 0.07; transform: scaleX(0.85) translateX(-6%); }
+  }
+  .animate-aurora {
+    animation: aurora-sweep 10s ease-in-out infinite;
+  }
+
+  /* Borde brillante rotatorio en stat cards */
+  @keyframes border-glow {
+    0%, 100% { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.2), 0 4px 20px hsl(var(--primary) / 0.1); }
+    50%       { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.45), 0 4px 28px hsl(var(--primary) / 0.25); }
+  }
+  .animate-border-glow {
+    animation: border-glow 3s ease-in-out infinite;
+  }
+  .animate-border-glow-value {
+    animation: border-glow-value 3s ease-in-out infinite;
+  }
+  @keyframes border-glow-value {
+    0%, 100% { box-shadow: 0 0 0 1px hsl(var(--value) / 0.2), 0 4px 20px hsl(var(--value) / 0.1); }
+    50%       { box-shadow: 0 0 0 1px hsl(var(--value) / 0.45), 0 4px 28px hsl(var(--value) / 0.22); }
+  }
+
+  /* Flecha CTA: bounce derecha */
+  @keyframes arrow-bounce {
+    0%, 100% { transform: translateX(0); }
+    50%       { transform: translateX(4px); }
+  }
+  .group:hover .animate-arrow {
+    animation: arrow-bounce 0.6s ease-in-out infinite;
+  }
+
   /* Marquee para el ticker de partidos en vivo */
   @keyframes marquee {
     from { transform: translateX(0); }
@@ -78,14 +153,61 @@
     animation: marquee 40s linear infinite;
   }
 
-  /* Glow para botones de afiliado */
+  /* Shimmer para elementos premium */
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .animate-shimmer {
+    background: linear-gradient(
+      105deg,
+      hsl(var(--primary) / 0) 40%,
+      hsl(var(--primary) / 0.25) 50%,
+      hsl(var(--primary) / 0) 60%
+    );
+    background-size: 200% auto;
+    animation: shimmer 2.5s linear infinite;
+  }
+
+  /* Glow dorado para botones/elementos principales */
   .glow-primary {
-    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4),
-                0 4px 20px hsl(var(--primary) / 0.25);
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35),
+                0 4px 24px hsl(var(--primary) / 0.30),
+                0 1px 6px hsl(var(--primary) / 0.20);
+  }
+
+  /* Glow esmeralda para value bets */
+  .glow-value {
+    box-shadow: 0 0 0 1px hsl(var(--value) / 0.35),
+                0 4px 24px hsl(var(--value) / 0.25);
+  }
+
+  /* Gradiente dinero para fondos de sección */
+  .bg-money-gradient {
+    background: radial-gradient(
+        ellipse 70% 50% at 15% 40%,
+        hsl(var(--primary) / 0.18),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 60% 45% at 85% 65%,
+        hsl(var(--value) / 0.14),
+        transparent 55%
+      );
   }
 
   /* Grid noise para fondos editoriales */
   .bg-noise {
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  }
+
+  /* Borde dorado con gradiente */
+  .border-gold-gradient {
+    border-image: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.6),
+      hsl(var(--primary) / 0.1),
+      hsl(var(--value) / 0.4)
+    ) 1;
   }
 }

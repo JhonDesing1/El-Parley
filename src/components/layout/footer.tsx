@@ -10,29 +10,41 @@ export function Footer() {
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
           <p className="text-xs leading-relaxed text-muted-foreground">
             <strong className="text-foreground">Juega responsablemente.</strong> Apostar
-            puede ser adictivo. Solo para mayores de 18 años. Si crees que tienes un
-            problema con el juego, llama a la <strong>LÍNEA 106</strong> en Bogotá o
-            visita{" "}
+            puede ser adictivo. Solo para mayores de 18 años. La disponibilidad de los
+            operadores referenciados varía por país — verifica la legalidad en tu
+            jurisdicción. Ayuda:{" "}
+            <strong className="text-foreground">Colombia</strong> 106 / 01800-911-211 ·{" "}
+            <strong className="text-foreground">Internacional</strong>{" "}
             <a
-              href="https://ludopatia.org.co"
+              href="https://www.begambleaware.org"
               target="_blank"
               rel="noreferrer"
               className="underline hover:text-foreground"
             >
-              ludopatia.org.co
+              BeGambleAware.org
             </a>
-            . Operadores licenciados por Coljuegos.
+            {" "}·{" "}
+            <a
+              href="https://www.gamblingtherapy.org"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              GamblingTherapy.org
+            </a>
           </p>
         </div>
       </div>
 
-      <div className="container grid gap-8 py-12 md:grid-cols-4">
+      <div className="container grid gap-8 py-12 sm:grid-cols-2 md:grid-cols-4">
         <div className="md:col-span-2">
           <Link href="/" className="flex items-center gap-2 font-display text-lg font-black uppercase">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-value text-black">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Zap className="h-4 w-4" strokeWidth={3} />
             </div>
-            ApuestaValue
+            <span className="bg-gradient-to-r from-primary to-primary/75 bg-clip-text text-transparent">
+              El Parley
+            </span>
           </Link>
           <p className="mt-3 max-w-sm text-sm text-muted-foreground">
             La plataforma de value betting #1 para Colombia y Latinoamérica.
@@ -63,7 +75,7 @@ export function Footer() {
 
       <div className="border-t border-border/40">
         <div className="container py-4 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} ApuestaValue. Plataforma informativa. No aceptamos
+          © {new Date().getFullYear()} El Parley. Plataforma informativa. No aceptamos
           apuestas ni custodiamos fondos.
         </div>
       </div>

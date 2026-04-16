@@ -1,4 +1,4 @@
-# 🚀 Deploy ApuestaValue — Paso a Paso
+# 🚀 Deploy El Parley — Paso a Paso
 
 > Tiempo estimado: ~30 min si tienes las cuentas listas.
 
@@ -23,7 +23,7 @@
 ## 1. Clona y prepara local
 
 ```bash
-git clone <tu-repo> apuestavalue && cd apuestavalue
+git clone <tu-repo> El Parley && cd El Parley
 cp .env.example .env.local
 npm install
 ```
@@ -77,6 +77,13 @@ En **Auth → URL Configuration**:
 
 ### 2.5 Desplegar Edge Functions
 
+> ⚠️ **PASO MANUAL — NO está automatizado en CI/CD.**
+> Vercel solo despliega el frontend Next.js. Las Edge Functions de Supabase
+> deben desplegarse por separado con el CLI cada vez que cambien.
+> Si omites este paso, `detect-value-bets` y `generate-parlays` quedarán
+> desactualizadas (o inexistentes en un proyecto nuevo) y **no se detectarán
+> value bets ni se generarán parlays**.
+
 ```bash
 npx supabase functions deploy detect-value-bets
 npx supabase functions deploy generate-parlays
@@ -123,8 +130,8 @@ select cron.schedule(
 ### 3.1 Crear productos
 
 Dashboard → Products → **+ Add product**:
-- **ApuestaValue Premium Mensual** — recurring $4.99/mes
-- **ApuestaValue Premium Anual** — recurring $49/año
+- **El Parley Premium Mensual** — recurring $4.99/mes
+- **El Parley Premium Anual** — recurring $49/año
 
 Copia los `price_id` (empiezan con `price_...`) en `.env.local`.
 
@@ -226,8 +233,9 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 - [ ] `/partido/[id]` carga con cuotas
 - [ ] El click en "Apostar" registra en `affiliate_clicks` y redirige
 - [ ] El webhook de Stripe pasa a `active` la suscripción tras checkout test
+- [ ] **Edge functions desplegadas manualmente** (`npx supabase functions deploy detect-value-bets && npx supabase functions deploy generate-parlays`) — este paso NO lo hace Vercel
 - [ ] Cron jobs ejecutándose en Vercel (panel Cron Jobs)
-- [ ] Edge function `detect-value-bets` corriendo cada 15min
+- [ ] Edge function `detect-value-bets` corriendo cada 15min (verificar en Supabase → Edge Functions → Logs)
 - [ ] Banner de juego responsable visible en footer
 - [ ] PWA instalable (manifest + iconos en `/public/icons/`)
 - [ ] Sitemap accesible en `/sitemap.xml`

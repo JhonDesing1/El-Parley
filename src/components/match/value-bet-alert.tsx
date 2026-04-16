@@ -1,15 +1,43 @@
-import { Sparkles, TrendingUp, Target } from "lucide-react";
+import { Sparkles, TrendingUp, Target, Lock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ValueBet } from "@/types";
 
+interface MatchContext {
+  kickoff: string;
+  home_team: { name: string; logo_url?: string | null };
+  away_team: { name: string; logo_url?: string | null };
+  league?: { name: string } | null;
+}
+
 interface ValueBetAlertProps {
   valueBet: ValueBet;
   matchId: number;
+  match?: MatchContext | null;
+  /** Slot para acciones adicionales (ej: botón de registro de pick) */
+  actions?: React.ReactNode;
 }
 
-export function ValueBetAlert({ valueBet, matchId }: ValueBetAlertProps) {
+function edgeBadgeClass(edge: number) {
+  if (edge >= 0.08) return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+  if (edge >= 0.05) return "bg-green-500/15 text-green-400 border-green-500/25";
+  return "bg-amber-500/15 text-amber-400 border-amber-500/25";
+}
+
+function formatKickoff(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("es-CO", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Bogota",
+  });
+}
+
+export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAlertProps) {
   const edgePct = (valueBet.edge * 100).toFixed(1);
   const modelPct = (valueBet.model_prob * 100).toFixed(0);
   const stakePct = (valueBet.kelly_fraction * 100).toFixed(1);
@@ -20,6 +48,21 @@ export function ValueBetAlert({ valueBet, matchId }: ValueBetAlertProps) {
       <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-value/20 blur-3xl" />
 
       <div className="relative p-6">
+        {/* Match context header */}
+        {match && (
+          <div className="mb-3 rounded-md bg-background/50 px-3 py-2 ring-1 ring-border/30">
+            <p className="truncate text-center text-sm font-semibold">
+              {match.home_team.name}{" "}
+              <span className="text-muted-foreground font-normal">vs</span>{" "}
+              {match.away_team.name}
+            </p>
+            <p className="text-center text-[11px] text-muted-foreground">
+              {match.league?.name && `${match.league.name} · `}
+              {formatKickoff(match.kickoff)}
+            </p>
+          </div>
+        )}
+
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-value/15 ring-1 ring-value/30">
@@ -34,7 +77,11 @@ export function ValueBetAlert({ valueBet, matchId }: ValueBetAlertProps) {
               </p>
             </div>
           </div>
-          <Badge variant="value">+{edgePct}% EDGE</Badge>
+          <span
+            className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-bold tabular-nums ${edgeBadgeClass(valueBet.edge)}`}
+          >
+            +{edgePct}% EDGE
+          </span>
         </div>
 
         <div className="mb-5 grid grid-cols-3 gap-3">
@@ -83,9 +130,48 @@ export function ValueBetAlert({ valueBet, matchId }: ValueBetAlertProps) {
           </a>
         </Button>
 
+        {actions && <div className="mt-2">{actions}</div>}
+
         <p className="mt-3 text-center text-[10px] text-muted-foreground">
-          Una value bet no garantiza ganancias. Apuesta solo lo que puedas perder. 18+
+          Análisis informativo — no garantiza ganancias. Verifica la disponibilidad del operador en tu país. +18. Juega responsablemente.
         </p>
+      </div>
+    </Card>
+  );
+}
+
+export function LockedValueBetCard({ match }: { match?: MatchContext | null }) {
+  return (
+    <Card className="relative overflow-hidden border-border/40">
+      {/* Blurred content */}
+      <div className="pointer-events-none select-none p-6 blur-sm" aria-hidden>
+        <div className="mb-3 h-10 w-full rounded-md bg-muted/60" />
+        <div className="mb-4 flex justify-between">
+          <div className="h-8 w-32 rounded bg-muted/60" />
+          <div className="h-6 w-20 rounded bg-muted/60" />
+        </div>
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded-lg bg-muted/50" />
+          ))}
+        </div>
+        <div className="h-24 rounded-lg bg-muted/50" />
+      </div>
+
+      {/* Overlay */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-[2px]">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted ring-1 ring-border">
+          <Lock className="h-5 w-5 text-muted-foreground" />
+        </div>
+        {match && (
+          <p className="text-sm font-semibold">
+            {match.home_team.name} vs {match.away_team.name}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">Value bet premium detectada</p>
+        <Button asChild size="sm" variant="default">
+          <a href="/premium">Ver con Premium</a>
+        </Button>
       </div>
     </Card>
   );

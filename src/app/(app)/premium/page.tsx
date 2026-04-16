@@ -6,9 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 
 export const metadata = {
-  title: "Premium — ApuestaValue",
+  title: "Premium — El Parley",
   description:
     "Desbloquea value bets exclusivas, parlays VIP, ROI tracking y alertas push. Desde $19.900 COP/mes.",
+  openGraph: {
+    title: "Premium — El Parley",
+    description:
+      "Desbloquea value bets exclusivas, parlays VIP, ROI tracking y alertas push. Desde $19.900 COP/mes.",
+  },
 };
 
 const PLANS = [
@@ -28,13 +33,16 @@ const PLANS = [
     cta: "Empezar gratis",
     ctaHref: "/register",
     highlight: false,
+    payuHref: null,
+    pseHref: null,
+    stripeHref: null,
   },
   {
     id: "premium",
     name: "Premium",
     icon: Zap,
-    priceCOP: "$19.900",
-    priceUSD: "$4.99",
+    priceCOP: "$30.000",
+    priceUSD: null,
     period: "/mes",
     description: "Para apostadores serios",
     features: [
@@ -46,17 +54,20 @@ const PLANS = [
       "Análisis xG y modelos avanzados",
       "Sin publicidad",
     ],
-    cta: "Suscribirme",
-    ctaHref: "/api/checkout?plan=premium",
+    cta: null,
+    ctaHref: null,
+    mpHref: "/api/checkout-mp?plan=monthly",
+    mpYearlyHref: "/api/checkout-mp?plan=yearly",
+    mpYearlyPrice: "$300.000",
     highlight: true,
   },
   {
     id: "pro",
     name: "Pro",
     icon: Crown,
-    priceCOP: "$59.900",
-    priceUSD: "$14.99",
-    period: "/mes",
+    priceCOP: "Próximamente",
+    priceUSD: null,
+    period: null,
     description: "Para profesionales y traders",
     features: [
       "Todo lo del plan Premium",
@@ -66,15 +77,40 @@ const PLANS = [
       "Soporte prioritario",
       "Webhooks personalizados",
     ],
-    cta: "Hablar con ventas",
-    ctaHref: "/api/checkout?plan=pro",
+    cta: "Próximamente",
+    ctaHref: "#",
+    mpHref: null,
+    mpYearlyHref: null,
+    mpYearlyPrice: null,
     highlight: false,
   },
 ];
 
-export default function PremiumPage() {
+export default async function PremiumPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>;
+}) {
+  const params = await searchParams;
+
   return (
     <div className="container max-w-6xl py-12">
+      {params.payment === "declined" && (
+        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          El pago fue rechazado. Verifica los datos de tu tarjeta e inténtalo de nuevo.
+        </div>
+      )}
+      {params.payment === "error" && (
+        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Ocurrió un error procesando el pago. Intenta de nuevo o contacta soporte.
+        </div>
+      )}
+      {params.error === "invalid" && (
+        <div className="mx-auto mb-6 max-w-2xl rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-400">
+          No pudimos verificar la respuesta de PayU. Si realizaste un pago, espera unos minutos y revisa tu dashboard.
+        </div>
+      )}
+
       <header className="mx-auto mb-12 max-w-2xl text-center">
         <Badge variant="value" className="mb-4">
           PREMIUM
@@ -102,6 +138,11 @@ export default function PremiumPage() {
               {plan.highlight && (
                 <Badge variant="value" className="absolute -top-3 left-1/2 -translate-x-1/2">
                   MÁS POPULAR
+                </Badge>
+              )}
+              {plan.id === "pro" && (
+                <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 border-amber-500/50 bg-amber-500/10 text-amber-400">
+                  NUEVO
                 </Badge>
               )}
 
@@ -137,14 +178,34 @@ export default function PremiumPage() {
                 ))}
               </ul>
 
-              <Button
-                asChild
-                variant={plan.highlight ? "value" : "outline"}
-                size="lg"
-                className="mt-6 w-full"
-              >
-                <Link href={plan.ctaHref}>{plan.cta}</Link>
-              </Button>
+              {plan.mpHref ? (
+                <div className="mt-6 flex flex-col gap-2">
+                  <Button asChild variant="value" size="lg" className="w-full">
+                    <Link href={plan.mpHref}>Pagar mensual · $30.000 COP</Link>
+                  </Button>
+                  {plan.mpYearlyHref && plan.mpYearlyPrice && (
+                    <Button asChild variant="outline" size="sm" className="w-full">
+                      <Link href={plan.mpYearlyHref}>
+                        Pagar anual · {plan.mpYearlyPrice} COP
+                        <span className="ml-1 text-xs text-value">(ahorra 17%)</span>
+                      </Link>
+                    </Button>
+                  )}
+                  <p className="text-center text-xs text-muted-foreground">
+                    Vía Mercado Pago · Tarjeta, Nequi, PSE
+                  </p>
+                </div>
+              ) : (
+                <Button
+                  asChild
+                  variant={plan.highlight ? "value" : "outline"}
+                  size="lg"
+                  className="mt-6 w-full"
+                  disabled={plan.ctaHref === "#"}
+                >
+                  <Link href={plan.ctaHref ?? "#"}>{plan.cta}</Link>
+                </Button>
+              )}
             </Card>
           );
         })}
@@ -152,8 +213,7 @@ export default function PremiumPage() {
 
       <div className="mx-auto mt-16 max-w-2xl text-center">
         <p className="text-sm text-muted-foreground">
-          🇨🇴 Pagos en pesos vía PayU · 🌎 Pagos internacionales vía Stripe · Cancela en
-          cualquier momento · 7 días de garantía
+          🇨🇴 Tarjeta / Nequi / PSE vía Mercado Pago · Cancela en cualquier momento · 7 días de garantía
         </p>
       </div>
     </div>

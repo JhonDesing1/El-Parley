@@ -1,5 +1,25 @@
 ﻿const BASE = `https://${process.env.API_FOOTBALL_HOST ?? "v3.football.api-sports.io"}`;
 
+/**
+ * Leagues that get priority API budget during high-traffic events
+ * (World Cup, Champions League, clásicos, etc.).
+ * Used by cron jobs to decide which matches to sync more aggressively.
+ *
+ * IDs from API-Football:
+ *  1  → FIFA World Cup
+ *  2  → UEFA Champions League
+ *  3  → UEFA Europa League
+ *  13 → Copa Libertadores
+ *  39 → Premier League
+ *  61 → Ligue 1
+ *  78 → Bundesliga
+ * 135 → Serie A
+ * 140 → La Liga
+ * 239 → Liga BetPlay (Colombia)
+ * 848 → UEFA Conference League
+ */
+export const HIGH_PRIORITY_LEAGUE_IDS = [1, 2, 3, 13, 39, 61, 78, 135, 140, 239, 848];
+
 function headers() {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) throw new Error("API_FOOTBALL_KEY no configurada");
@@ -140,6 +160,87 @@ export async function fetchPredictionsForFixture(
 
   if (isNaN(homeXg) || isNaN(awayXg) || homeXg <= 0 || awayXg <= 0) return null;
   return { homeXg, awayXg };
+}
+
+/**
+ * Devuelve el estado actual de un fixture (score, status, minuto).
+ * Un API call por fixture — usar con moderación (100 req/day limit).
+ */
+export async function fetchFixtureById(fixtureId: number): Promise<{
+  id: number;
+  status: ReturnType<typeof mapStatus>;
+  minute: number | null;
+  home_score: number | null;
+  away_score: number | null;
+  home_score_ht: number | null;
+  away_score_ht: number | null;
+} | null> {
+  const response = await af<AfFixture[]>("/fixtures", { id: fixtureId });
+  if (!response.length) return null;
+  const f = response[0];
+  return {
+    id: f.fixture.id,
+    status: mapStatus(f.fixture.status.short),
+    minute: f.fixture.status.elapsed,
+    home_score: f.goals.home,
+    away_score: f.goals.away,
+    home_score_ht: f.score.halftime.home,
+    away_score_ht: f.score.halftime.away,
+  };
+}
+
+interface AfInjury {
+  player: {
+    id: number;
+    name: string;
+    photo: string;
+    type: string;   // e.g. "Ankle", "Knee", "Red Card"
+    reason: string; // "Injury" | "Suspended" | "Missing Fixture" | "Doubtful"
+  };
+  team: {
+    id: number;
+    name: string;
+    logo: string;
+  };
+}
+
+/**
+ * Fetches injury/suspension report for a fixture from API-Football `/injuries`.
+ * Returns rows ready to upsert into the `injuries` table.
+ * One API call per fixture — use conservatively.
+ */
+export async function fetchInjuriesForFixture(fixtureId: number): Promise<
+  Array<{
+    match_id: number;
+    team_id: number;
+    player_name: string;
+    player_photo: string | null;
+    reason: "injury" | "suspension" | "other";
+    type: string | null;
+    detail: string | null;
+  }>
+> {
+  const response = await af<AfInjury[]>("/injuries", { fixture: fixtureId });
+  if (!response.length) return [];
+
+  return response.map((entry) => {
+    const rawReason = (entry.player.reason ?? "").toLowerCase();
+    const reason: "injury" | "suspension" | "other" = rawReason.includes("suspend")
+      ? "suspension"
+      : rawReason.includes("injury") || rawReason.includes("doubtful") || rawReason.includes("missing")
+      ? "injury"
+      : "other";
+
+    return {
+      match_id: fixtureId,
+      team_id: entry.team.id,
+      player_name: entry.player.name,
+      player_photo: entry.player.photo || null,
+      reason,
+      type: entry.player.type || null,
+      detail: entry.player.reason || null,
+    };
+  });
 }
 
 export async function fetchOddsForFixtures(fixtureId: number) {
