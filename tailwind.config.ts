@@ -19,45 +19,43 @@ const config: Config = {
         mono: ["var(--font-jetbrains)", "monospace"],
       },
       colors: {
-        // Paleta fija — azul marino oscuro + naranja Betplay-style
-        border:     "#162030",
-        input:      "#162030",
-        ring:       "#e85a0e",
-        background: "#040c18",
-        foreground: "#f0f2f5",
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT:    "#e85a0e",
-          foreground: "#ffffff",
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT:    "#121d30",
-          foreground: "#d0d8e8",
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
         },
         accent: {
-          DEFAULT:    "#121d30",
-          foreground: "#f0f2f5",
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
         },
         destructive: {
-          DEFAULT:    "#dc2626",
-          foreground: "#f0f2f5",
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT:    "#0f1a28",
-          foreground: "#7a8fa8",
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
         },
         card: {
-          DEFAULT:    "#080f1c",
-          foreground: "#f0f2f5",
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
         },
         popover: {
-          DEFAULT:    "#080f1c",
-          foreground: "#f0f2f5",
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
         },
-        // Colores semánticos de apuestas
-        value: "#1fc46a",  // verde esmeralda — profit
-        live:  "#dc2626",  // rojo — en vivo
-        win:   "#1fc46a",
-        loss:  "#dc2626",
+        value: "hsl(var(--value))",
+        live: "hsl(var(--live))",
+        win: "hsl(var(--win))",
+        loss: "hsl(var(--loss))",
       },
       borderRadius: {
         lg: "var(--radius)",
