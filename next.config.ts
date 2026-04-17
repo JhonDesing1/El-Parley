@@ -43,6 +43,22 @@ const nextConfig: NextConfig = {
 
     return [
       {
+        // Páginas HTML — nunca cachear en CDN (Cloudflare, etc.)
+        // Los assets estáticos de Next.js tienen content-hash propio y se cachean por separado
+        source: "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf)$).*)",
+        headers: [
+          { key: "Cache-Control", value: "no-store, must-revalidate" },
+          { key: "Pragma", value: "no-cache" },
+        ],
+      },
+      {
+        // Assets estáticos con content-hash: se pueden cachear agresivamente
+        source: "/_next/static/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -52,9 +68,6 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
-          // Enforce HTTPS for 2 years; includeSubDomains covers auth.domain etc.
-          // Vercel already terminates TLS, so this header is seen by browsers on
-          // the first HTTPS response and cached for `max-age` seconds.
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",
