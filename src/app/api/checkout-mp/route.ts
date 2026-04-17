@@ -47,11 +47,16 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(checkoutUrl, 303);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    let msg: string;
+    try {
+      msg = JSON.stringify(error);
+    } catch {
+      msg = String(error);
+    }
     console.error("[checkout-mp] Error creando preferencia:", msg);
     const url = new URL("/premium", req.url);
     url.searchParams.set("payment", "error");
-    url.searchParams.set("reason", msg.slice(0, 100));
+    url.searchParams.set("reason", msg.slice(0, 200));
     return NextResponse.redirect(url, 303);
   }
 }
