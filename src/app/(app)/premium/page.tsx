@@ -32,8 +32,8 @@ const plans = [
   {
     name: "Premium",
     icon: Crown,
-    monthlyPrice: 19900,
-    yearlyPrice: Math.round(19900 * 12 * 0.8),
+    monthlyPrice: 5000,
+    yearlyPrice: Math.round(5000 * 12 * 0.8),
     description: "Para apostadores serios que buscan ventaja competitiva",
     features: [
       { name: "Value bets básicas (6/día)", included: true },
@@ -47,7 +47,7 @@ const plans = [
       { name: "Badge Premium", included: true },
     ],
     cta: "Suscribirse",
-    ctaLink: null, // se calcula dinámicamente según el toggle anual
+    ctaLink: "checkout-mp", // se construye dinámicamente según el toggle anual
     highlighted: true,
     badge: "Más popular",
   },
@@ -196,25 +196,29 @@ export default function PricingPage() {
                 </CardContent>
 
                 <CardFooter className="pt-4">
-                  <Button
-                    asChild={plan.ctaLink !== null && plan.ctaLink !== "#"}
-                    disabled={plan.ctaLink === "#" || plan.ctaLink === null}
-                    className={`w-full ${
-                      plan.highlighted
-                        ? "bg-amber-500 text-zinc-950 hover:bg-amber-600"
-                        : "bg-zinc-800 text-white hover:bg-zinc-700"
-                    }`}
-                  >
-                    {plan.ctaLink !== null && plan.ctaLink !== "#" ? (
-                      <a href={
-                        plan.name === "Premium"
+                  {plan.ctaLink === "#" ? (
+                    <Button
+                      disabled
+                      className={`w-full bg-zinc-800 text-white`}
+                    >
+                      {plan.cta}
+                    </Button>
+                  ) : (
+                    <a
+                      href={
+                        plan.ctaLink === "checkout-mp"
                           ? `/api/checkout-mp?plan=${isYearly ? "yearly" : "monthly"}`
                           : plan.ctaLink
-                      }>{plan.cta}</a>
-                    ) : (
-                      <span>{plan.cta}</span>
-                    )}
-                  </Button>
+                      }
+                      className={`inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                        plan.highlighted
+                          ? "bg-amber-500 text-zinc-950 hover:bg-amber-600"
+                          : "bg-zinc-800 text-white hover:bg-zinc-700"
+                      }`}
+                    >
+                      {plan.cta}
+                    </a>
+                  )}
                 </CardFooter>
               </Card>
             )
