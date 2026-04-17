@@ -19,44 +19,45 @@ const config: Config = {
         mono: ["var(--font-jetbrains)", "monospace"],
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        // Paleta fija — azul marino oscuro + naranja Betplay-style
+        border:     "#162030",
+        input:      "#162030",
+        ring:       "#e85a0e",
+        background: "#040c18",
+        foreground: "#f0f2f5",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT:    "#e85a0e",
+          foreground: "#ffffff",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT:    "#121d30",
+          foreground: "#d0d8e8",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT:    "#121d30",
+          foreground: "#f0f2f5",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT:    "#dc2626",
+          foreground: "#f0f2f5",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT:    "#0f1a28",
+          foreground: "#7a8fa8",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT:    "#080f1c",
+          foreground: "#f0f2f5",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT:    "#080f1c",
+          foreground: "#f0f2f5",
         },
-        // Semantic betting colors
-        value: "hsl(var(--value))", // neon lime for value bets
-        live: "hsl(var(--live))", // red pulsing
-        win: "hsl(var(--win))",
-        loss: "hsl(var(--loss))",
+        // Colores semánticos de apuestas
+        value: "#1fc46a",  // verde esmeralda — profit
+        live:  "#dc2626",  // rojo — en vivo
+        win:   "#1fc46a",
+        loss:  "#dc2626",
       },
       borderRadius: {
         lg: "var(--radius)",
