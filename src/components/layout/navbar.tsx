@@ -2,14 +2,15 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
-  Zap,
   TrendingUp,
   Newspaper,
   ClipboardList,
   BookOpen,
   Menu,
   Crown,
+  Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,11 +36,8 @@ export function Navbar() {
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <Zap className="size-7 fill-primary text-primary" />
-          <span className="bg-gradient-to-r from-primary to-orange-400 bg-clip-text font-display text-xl font-bold text-transparent">
-            El Parley
-          </span>
+        <Link href="/" className="flex items-center">
+          <Image src="/logo.png" alt="El Parley" width={140} height={40} className="h-10 w-auto" priority />
         </Link>
 
         {/* Desktop Navigation */}
@@ -89,11 +87,8 @@ export function Navbar() {
             className="w-full border-border bg-background sm:max-w-sm"
           >
             <SheetHeader className="border-b border-border pb-4">
-              <SheetTitle className="flex items-center gap-2">
-                <Zap className="size-6 fill-primary text-primary" />
-                <span className="bg-gradient-to-r from-primary to-orange-400 bg-clip-text font-display text-lg font-bold text-transparent">
-                  El Parley
-                </span>
+              <SheetTitle className="flex items-center">
+                <Image src="/logo.png" alt="El Parley" width={120} height={36} className="h-9 w-auto" />
               </SheetTitle>
             </SheetHeader>
 
