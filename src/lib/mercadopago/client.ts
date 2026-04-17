@@ -41,7 +41,9 @@ export async function createMPPreference({
   const client = getMPClient();
   const preference = new Preference(client);
   const planConfig = MP_PLANS[plan];
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://elparley.com";
+  // MP exige HTTPS en back_urls — forzamos https aunque la env var use http
+  const siteUrl = rawSiteUrl.replace(/^http:\/\//, "https://").replace(/\/$/, "");
 
   const response = await preference.create({
     body: {
