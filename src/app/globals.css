@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TEST: forzar naranja directo sin variables */
+.bg-primary, [class*="bg-primary"] {
+  background-color: #e85a0e !important;
+}
+.text-primary, [class*="text-primary"] {
+  color: #e85a0e !important;
+}
+.fill-primary, [class*="fill-primary"] {
+  fill: #e85a0e !important;
+}
+
 @layer base {
   :root {
     /* LIGHT — modo secundario */
