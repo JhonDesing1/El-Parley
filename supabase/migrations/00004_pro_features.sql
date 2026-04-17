@@ -35,8 +35,19 @@ create index if not exists idx_user_webhooks_active
 -- ─── RLS para user_webhooks ──────────────────────────────────
 alter table public.user_webhooks enable row level security;
 
-create policy "Users manage own webhooks"
-  on public.user_webhooks
-  for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename  = 'user_webhooks'
+      and policyname = 'Users manage own webhooks'
+  ) then
+    execute $policy$
+      create policy "Users manage own webhooks"
+        on public.user_webhooks
+        for all
+        using (auth.uid() = user_id)
+        with check (auth.uid() = user_id)
+    $policy$;
+  end if;
+end $$;
