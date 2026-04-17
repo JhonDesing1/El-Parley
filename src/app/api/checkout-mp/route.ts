@@ -21,8 +21,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login?redirect=/premium", req.url));
   }
 
-  if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
-    return NextResponse.json({ error: "Pagos no configurados" }, { status: 503 });
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+  if (!token) {
+    console.error("[checkout-mp] MERCADOPAGO_ACCESS_TOKEN no configurado en Vercel");
+    return NextResponse.redirect(new URL("/premium?payment=error&reason=no_token", req.url));
   }
 
   const { searchParams } = new URL(req.url);
@@ -45,7 +47,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(checkoutUrl, 303);
   } catch (error) {
-    console.error("[checkout-mp] Error creando preferencia:", error);
-    return NextResponse.redirect(new URL("/premium?payment=error", req.url));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[checkout-mp] Error creando preferencia:", msg);
+    const url = new URL("/premium", req.url);
+    url.searchParams.set("payment", "error");
+    url.searchParams.set("reason", msg.slice(0, 100));
+    return NextResponse.redirect(url, 303);
   }
 }

@@ -22,7 +22,7 @@ export const MP_PLANS: Record<MPPlan, MPPlanConfig> = {
 };
 
 export function getMPClient(): MercadoPagoConfig {
-  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
   if (!accessToken) throw new Error("MERCADOPAGO_ACCESS_TOKEN no configurado");
   return new MercadoPagoConfig({ accessToken });
 }
