@@ -14,7 +14,6 @@ export function TelegramLinkClient({
   currentChatId: string | null;
 }) {
   const [chatId, setChatId] = useState(currentChatId);
-  const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

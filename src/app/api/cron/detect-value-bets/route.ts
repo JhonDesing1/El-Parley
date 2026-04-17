@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import { detectValueBet } from "@/lib/betting/value-bet";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
+import { notifyProUsers } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -148,6 +149,14 @@ export async function GET(req: NextRequest) {
       const { error: insErr } = await supabase.from("value_bets").insert(bets);
       if (!insErr) detected += bets.length;
     }
+  }
+
+  // Notificar por Telegram si se detectaron value bets nuevas
+  if (detected > 0) {
+    const msg =
+      `🎯 <b>${detected} value bet${detected > 1 ? "s" : ""} nueva${detected > 1 ? "s" : ""}</b> detectada${detected > 1 ? "s" : ""}.\n\n` +
+      `Entra a elparley.com/value-bets para verla${detected > 1 ? "s" : ""}.`;
+    await notifyProUsers(msg, "value_bets");
   }
 
   return NextResponse.json({

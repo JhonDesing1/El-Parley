@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { calculateParlay, generateDailyParlay } from "@/lib/betting/parlay-calculator";
 import type { Database } from "@/types/database";
+import { notifyProUsers } from "@/lib/telegram/send";
 
 type MarketType = Database["public"]["Enums"]["market_type"];
 
@@ -335,6 +336,15 @@ export async function GET(req: NextRequest) {
     );
 
     if (id) generatedIds.push(id);
+  }
+
+  // Notificar por Telegram si se generaron parlays
+  if (generatedIds.length > 0) {
+    const msg =
+      `🃏 <b>Parlay${generatedIds.length > 1 ? "s" : ""} del día generado${generatedIds.length > 1 ? "s" : ""}</b>\n\n` +
+      `${generatedIds.length} combinada${generatedIds.length > 1 ? "s" : ""} lista${generatedIds.length > 1 ? "s" : ""} para hoy.\n` +
+      `Entra a elparley.com/parlays para verla${generatedIds.length > 1 ? "s" : ""}.`;
+    await notifyProUsers(msg, "parlays");
   }
 
   return NextResponse.json({

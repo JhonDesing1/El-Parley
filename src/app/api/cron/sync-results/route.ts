@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fetchFixtureById } from "@/lib/api/api-football";
+import { sendTelegramMessage } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -70,6 +71,9 @@ export async function GET(req: NextRequest) {
   let settled = 0;
   let matchesUpdated = 0;
 
+  // Acumula notificaciones de picks resueltos para enviar al final
+  const pickNotifications: Array<{ userId: string; text: string }> = [];
+
   const results = await Promise.allSettled(
     candidates.map(async (match) => {
       const fixture = await fetchFixtureById(match.id);
@@ -123,7 +127,7 @@ export async function GET(req: NextRequest) {
       // ── Resolve user_picks ─────────────────────────────────────
       const { data: pendingPicks } = await supabase
         .from("user_picks")
-        .select("id, market, selection, stake, odds")
+        .select("id, user_id, market, selection, stake, odds")
         .eq("match_id", match.id)
         .eq("result", "pending");
 
@@ -146,6 +150,18 @@ export async function GET(req: NextRequest) {
             .eq("id", pick.id);
 
           betsSettled++;
+
+          if (result !== "void" && pick.user_id) {
+            const emoji = result === "won" ? "✅" : "❌";
+            const plText =
+              profitLoss != null
+                ? ` (${profitLoss >= 0 ? "+" : ""}${profitLoss.toFixed(2)} u.)`
+                : "";
+            pickNotifications.push({
+              userId: pick.user_id,
+              text: `${emoji} <b>Pick resuelto: ${result === "won" ? "GANADO" : "PERDIDO"}</b>${plText}\n\nVe tu historial en elparley.com/picks`,
+            });
+          }
         }
       }
 
@@ -227,6 +243,40 @@ export async function GET(req: NextRequest) {
       settled += r.value.settled;
     } else {
       console.error("[sync-results] fixture failed:", r.reason);
+    }
+  }
+
+  // Enviar notificaciones de picks resueltos a usuarios Pro con tg_results=true
+  if (pickNotifications.length > 0) {
+    const userIds = [...new Set(pickNotifications.map((n) => n.userId))];
+
+    const { data: proProfiles } = await supabase
+      .from("profiles")
+      .select("id, telegram_chat_id")
+      .in("id", userIds)
+      .not("telegram_chat_id", "is", null)
+      .eq("tg_results", true);
+
+    if (proProfiles?.length) {
+      const { data: activeSubs } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("tier", "pro")
+        .in("status", ["active", "trialing"])
+        .in("user_id", proProfiles.map((p) => p.id));
+
+      const proIds = new Set((activeSubs ?? []).map((s) => s.user_id));
+      const chatMap = new Map(
+        proProfiles
+          .filter((p) => proIds.has(p.id))
+          .map((p) => [p.id, p.telegram_chat_id!]),
+      );
+
+      await Promise.allSettled(
+        pickNotifications
+          .filter((n) => chatMap.has(n.userId))
+          .map((n) => sendTelegramMessage(chatMap.get(n.userId)!, n.text)),
+      );
     }
   }
 

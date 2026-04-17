@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Send } from "lucide-react";
 import { TelegramLinkClient } from "./telegram-link-client";
+import { TelegramPrefsClient } from "./telegram-prefs-client";
 
 export const metadata = { title: "Bot Telegram — El Parley Pro" };
 
@@ -20,12 +21,18 @@ export default async function TelegramPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("telegram_chat_id")
+    .select("telegram_chat_id, tg_value_bets, tg_results, tg_parlays")
     .eq("id", user.id)
     .single();
 
   const chatId = profile?.telegram_chat_id ?? null;
-  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "El Parley_bot";
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "ElParleyBot";
+
+  const prefs = {
+    value_bets: profile?.tg_value_bets ?? true,
+    results: profile?.tg_results ?? true,
+    parlays: profile?.tg_parlays ?? true,
+  };
 
   return (
     <div className="container max-w-2xl py-8">
@@ -42,7 +49,7 @@ export default async function TelegramPage() {
         <Badge className="ml-auto border-amber-500/50 bg-amber-500/10 text-amber-400">PRO</Badge>
       </div>
 
-      <Card className="mb-6">
+      <Card className="mb-4">
         <CardHeader>
           <CardTitle className="text-base">
             {chatId ? "Cuenta vinculada" : "Vincular cuenta"}
@@ -57,27 +64,16 @@ export default async function TelegramPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Alertas que recibirás</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5 text-amber-400">•</span>
-              <span>Nueva value bet detectada (edge &gt;5%)</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5 text-amber-400">•</span>
-              <span>Resultado de una value bet que seguiste</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-0.5 text-amber-400">•</span>
-              <span>Parlay VIP generado para el día</span>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
+      {chatId && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Configurar alertas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TelegramPrefsClient initial={prefs} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

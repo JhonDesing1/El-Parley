@@ -735,6 +735,9 @@ export type Database = {
           roi_30d: number | null
           roi_7d: number | null
           telegram_chat_id: string | null
+          tg_value_bets: boolean
+          tg_results: boolean
+          tg_parlays: boolean
           tier: Database["public"]["Enums"]["subscription_tier"]
           timezone: string | null
           total_picks: number | null
@@ -753,6 +756,9 @@ export type Database = {
           roi_30d?: number | null
           roi_7d?: number | null
           telegram_chat_id?: string | null
+          tg_value_bets?: boolean
+          tg_results?: boolean
+          tg_parlays?: boolean
           tier?: Database["public"]["Enums"]["subscription_tier"]
           timezone?: string | null
           total_picks?: number | null
@@ -771,6 +777,9 @@ export type Database = {
           roi_30d?: number | null
           roi_7d?: number | null
           telegram_chat_id?: string | null
+          tg_value_bets?: boolean
+          tg_results?: boolean
+          tg_parlays?: boolean
           tier?: Database["public"]["Enums"]["subscription_tier"]
           timezone?: string | null
           total_picks?: number | null
