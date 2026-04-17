@@ -11,7 +11,7 @@ export interface MPPlanConfig {
 export const MP_PLANS: Record<MPPlan, MPPlanConfig> = {
   monthly: {
     referencePrefix: "EP-M",
-    amount: 30000,
+    amount: 1000, // TEST — cambiar a 30000 antes de lanzar
     description: "El Parley Premium — Mensual",
   },
   yearly: {
