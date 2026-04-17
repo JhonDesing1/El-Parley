@@ -6,24 +6,24 @@
   :root {
     /* LIGHT — modo secundario */
     --background: 0 0% 100%;
-    --foreground: 224 20% 8%;
+    --foreground: 218 25% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 224 20% 8%;
+    --card-foreground: 218 25% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 20% 8%;
-    --primary: 43 85% 42%;
+    --popover-foreground: 218 25% 8%;
+    --primary: 22 88% 48%;             /* NARANJA — acción, energía */
     --primary-foreground: 0 0% 100%;
-    --secondary: 45 20% 94%;
-    --secondary-foreground: 224 20% 10%;
-    --muted: 45 15% 94%;
-    --muted-foreground: 224 10% 46%;
-    --accent: 45 20% 94%;
-    --accent-foreground: 224 20% 10%;
+    --secondary: 218 18% 93%;
+    --secondary-foreground: 218 25% 10%;
+    --muted: 218 14% 93%;
+    --muted-foreground: 218 10% 46%;
+    --accent: 218 18% 93%;
+    --accent-foreground: 218 25% 10%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 43 85% 42%;
+    --border: 218 18% 86%;
+    --input: 218 18% 86%;
+    --ring: 22 88% 48%;
     --value: 152 72% 36%;
     --live: 0 84% 60%;
     --win: 152 72% 36%;
@@ -32,26 +32,26 @@
   }
 
   .dark {
-    /* DARK — modo principal: abundancia y dinero */
-    --background: 220 28% 4%;          /* negro profundo, ligeramente frío */
-    --foreground: 45 35% 94%;          /* blanco cálido / crema */
-    --card: 220 25% 7%;                /* superficie de tarjeta oscura */
-    --card-foreground: 45 35% 94%;
-    --popover: 220 25% 6%;
-    --popover-foreground: 45 35% 94%;
-    --primary: 43 92% 52%;             /* ORO — riqueza, abundancia */
-    --primary-foreground: 220 28% 5%;  /* texto oscuro sobre oro */
-    --secondary: 220 22% 12%;
-    --secondary-foreground: 45 30% 88%;
-    --muted: 220 22% 10%;
-    --muted-foreground: 220 12% 58%;
-    --accent: 220 22% 12%;
-    --accent-foreground: 45 35% 94%;
+    /* DARK — modo principal: inspirado en Betplay */
+    --background: 218 40% 4%;          /* azul marino muy oscuro, casi negro */
+    --foreground: 210 25% 95%;         /* blanco frío / neutro */
+    --card: 218 36% 7%;                /* superficie de tarjeta azul marina */
+    --card-foreground: 210 25% 95%;
+    --popover: 218 36% 6%;
+    --popover-foreground: 210 25% 95%;
+    --primary: 22 92% 52%;             /* NARANJA — acción, energía */
+    --primary-foreground: 218 40% 5%;  /* texto oscuro sobre naranja */
+    --secondary: 218 30% 12%;
+    --secondary-foreground: 210 20% 88%;
+    --muted: 218 30% 10%;
+    --muted-foreground: 218 15% 55%;
+    --accent: 218 30% 12%;
+    --accent-foreground: 210 25% 95%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 45 35% 94%;
-    --border: 220 20% 14%;
-    --input: 220 20% 14%;
-    --ring: 43 92% 52%;                /* ring dorado */
+    --destructive-foreground: 210 25% 95%;
+    --border: 218 28% 14%;
+    --input: 218 28% 14%;
+    --ring: 22 92% 52%;                /* ring naranja */
     --value: 152 72% 44%;              /* ESMERALDA — profit, crecimiento */
     --live: 0 84% 60%;
     --win: 152 72% 44%;

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Manrope, JetBrains_Mono } from "next/font/google";
+import { Barlow_Condensed, DM_Sans, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { Suspense } from "react";
@@ -9,14 +9,16 @@ import { OneSignalProvider } from "@/components/providers/onesignal-provider";
 import { siteConfig } from "@/config/site";
 import "./globals.css";
 
-const archivo = Archivo({
+const barlowCondensed = Barlow_Condensed({
   subsets: ["latin"],
-  variable: "--font-archivo",
+  weight: ["400", "600", "700", "800"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
   display: "swap",
 });
-const manrope = Manrope({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  variable: "--font-sans",
   display: "swap",
 });
 const jetbrains = JetBrains_Mono({
@@ -73,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${archivo.variable} ${manrope.variable} ${jetbrains.variable}`}
+      className={`${barlowCondensed.variable} ${dmSans.variable} ${jetbrains.variable}`}
     >
       <body className="font-sans">
         <PostHogProvider>

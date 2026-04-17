@@ -11,10 +11,10 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        // Display: Archivo for bold editorial feel (sports magazine vibe)
-        display: ["var(--font-archivo)", "system-ui"],
-        // Body: Manrope for modern, readable
-        sans: ["var(--font-manrope)", "system-ui"],
+        // Display: Barlow Condensed for bold sports/energy feel
+        display: ["var(--font-display)", "system-ui"],
+        // Body: DM Sans for modern, clean readability
+        sans: ["var(--font-sans)", "system-ui"],
         // Numeric tabular for odds
         mono: ["var(--font-jetbrains)", "monospace"],
       },
