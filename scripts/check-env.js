@@ -27,9 +27,8 @@ const REQUIRED_PROD = [
 ];
 
 // ─── Grupos: al menos 1 de cada grupo debe estar presente en prod ─────────
-// Stripe deshabilitado — se usan PayU y MercadoPago
+// Stripe y PayU deshabilitados — se usa MercadoPago
 const PAYMENT_PROVIDERS = [
-  ["PAYU_API_KEY", "PAYU_MERCHANT_ID", "PAYU_ACCOUNT_ID"],
   ["MERCADOPAGO_ACCESS_TOKEN"],
 ];
 

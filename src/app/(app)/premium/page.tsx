@@ -47,7 +47,7 @@ const plans = [
       { name: "Badge Premium", included: true },
     ],
     cta: "Suscribirse",
-    ctaLink: "/api/checkout-mp?plan=monthly",
+    ctaLink: null, // se calcula dinámicamente según el toggle anual
     highlighted: true,
     badge: "Más popular",
   },
@@ -197,15 +197,23 @@ export default function PricingPage() {
 
                 <CardFooter className="pt-4">
                   <Button
-                    asChild
-                    disabled={plan.ctaLink === "#"}
+                    asChild={plan.ctaLink !== null && plan.ctaLink !== "#"}
+                    disabled={plan.ctaLink === "#" || plan.ctaLink === null}
                     className={`w-full ${
                       plan.highlighted
                         ? "bg-amber-500 text-zinc-950 hover:bg-amber-600"
                         : "bg-zinc-800 text-white hover:bg-zinc-700"
                     }`}
                   >
-                    <a href={plan.ctaLink}>{plan.cta}</a>
+                    {plan.ctaLink !== null && plan.ctaLink !== "#" ? (
+                      <a href={
+                        plan.name === "Premium"
+                          ? `/api/checkout-mp?plan=${isYearly ? "yearly" : "monthly"}`
+                          : plan.ctaLink
+                      }>{plan.cta}</a>
+                    ) : (
+                      <span>{plan.cta}</span>
+                    )}
                   </Button>
                 </CardFooter>
               </Card>
@@ -225,7 +233,7 @@ export default function PricingPage() {
             </a>
           </p>
           <div className="mt-6 flex items-center justify-center gap-6 text-xs text-zinc-600">
-            <span>🇨🇴 Nequi · PSE · Tarjeta vía Mercado Pago</span>
+            <span>🇨🇴 Nequi · Tarjeta · PSE vía Mercado Pago</span>
             <span>✅ Cancela cuando quieras</span>
             <span>🔒 Pago seguro</span>
           </div>
