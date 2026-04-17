@@ -82,6 +82,103 @@ export function calculateParlay(legs: ParlayLeg[]): ParlayResult {
 }
 
 /**
+ * Genera una "Combinada 80%": selecciones donde la probabilidad combinada
+ * del modelo supera el 80% y la cuota total objetivo es ≈ 3.5.
+ *
+ * Algoritmo greedy:
+ * 1. Filtra candidatos con modelProb ≥ 0.85 (para mantener prob combinada alta)
+ * 2. Ordena por modelProb descendente
+ * 3. Añade legs mientras la prob combinada se mantenga ≥ minCombinedProb
+ *    y la cuota acumulada no supere targetOdds × 1.3
+ * 4. Se detiene al alcanzar el target de odds (±25%)
+ */
+export function generateValueParlay(
+  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  options: { targetOdds?: number; minCombinedProb?: number; minIndividualProb?: number } = {},
+): ParlayLeg[] | null {
+  const { targetOdds = 3.5, minCombinedProb = 0.80, minIndividualProb = 0.82 } = options;
+
+  const filtered = candidates
+    .filter((c) => (c.modelProb ?? 0) >= minIndividualProb)
+    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+
+  if (filtered.length < 2) return null;
+
+  const selected: typeof filtered = [];
+  let combinedOdds = 1;
+  let combinedModelProb = 1;
+
+  for (const leg of filtered) {
+    const newOdds = combinedOdds * leg.decimalOdds;
+    const newProb = combinedModelProb * (leg.modelProb ?? 0);
+
+    // Con ≥2 piernas ya elegidas, detener si la prob combinada caería bajo el umbral
+    if (selected.length >= 2 && newProb < minCombinedProb) break;
+    // Detener si las cuotas superan el target en más de 30%
+    if (newOdds > targetOdds * 1.3) break;
+
+    selected.push(leg);
+    combinedOdds = newOdds;
+    combinedModelProb = newProb;
+
+    // Alcanzamos el objetivo de cuotas (±25%)
+    if (combinedOdds >= targetOdds * 0.75 && selected.length >= 2) break;
+  }
+
+  if (selected.length < 2) return null;
+  if (combinedModelProb < minCombinedProb) return null;
+
+  return selected;
+}
+
+/**
+ * Genera el "FunBet del día": combinada de alto riesgo / alta recompensa.
+ * Sin restricción de probabilidad combinada — es entretenimiento puro.
+ *
+ * Algoritmo:
+ * 1. Toma todos los candidatos ordenados por cuota individual descendente
+ * 2. Acumula hasta que el producto de cuotas alcance el targetOdds (≥70%)
+ * 3. Máximo maxLegs piernas
+ */
+export function generateFunBet(
+  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  options: { targetOdds?: number; maxLegs?: number } = {},
+): ParlayLeg[] | null {
+  const { targetOdds = 30, maxLegs = 10 } = options;
+
+  // Deduplicar por matchId (un único bet por partido)
+  const seenMatches = new Set<number>();
+  const deduped = candidates.filter((c) => {
+    if (seenMatches.has(c.matchId)) return false;
+    seenMatches.add(c.matchId);
+    return true;
+  });
+
+  // Ordenar por cuota descendente para alcanzar el target con menos piernas
+  const sorted = [...deduped]
+    .filter((c) => c.decimalOdds >= 1.25)
+    .sort((a, b) => b.decimalOdds - a.decimalOdds);
+
+  if (sorted.length < 2) return null;
+
+  const selected: typeof sorted = [];
+  let combinedOdds = 1;
+
+  for (const leg of sorted) {
+    if (selected.length >= maxLegs) break;
+    selected.push(leg);
+    combinedOdds *= leg.decimalOdds;
+    if (combinedOdds >= targetOdds * 0.80) break;
+  }
+
+  if (selected.length < 2) return null;
+  // Debe alcanzar al menos el 60% del target
+  if (combinedOdds < targetOdds * 0.60) return null;
+
+  return selected;
+}
+
+/**
  * Genera el "parlay del día": combinación de N selecciones con
  * probabilidad combinada del modelo > umbral.
  *

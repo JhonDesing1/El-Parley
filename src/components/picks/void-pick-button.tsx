@@ -54,7 +54,7 @@ export function VoidPickButton({ pickId, matchLabel }: VoidPickButtonProps) {
               <span className="font-medium text-foreground">{matchLabel}</span>
               <br />
               El pick pasará a estado <span className="font-semibold">Nulo</span> y no contará en
-              tu win rate ni ROI. Esta acción no se puede deshacer.
+              tus cuotas acertadas ni ROI. Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
 

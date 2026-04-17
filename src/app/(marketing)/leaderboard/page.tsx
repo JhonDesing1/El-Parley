@@ -192,12 +192,12 @@ function LeaderboardRow({
           )}
         </div>
         <div className="text-xs text-muted-foreground">
-          {entry.total_picks} picks · {entry.win_rate.toFixed(0)}% win rate
+          {entry.total_picks} picks · {(entry.win_rate / 100).toFixed(2)} cuotas acertadas
         </div>
         {/* Stats extra en móvil */}
         <div className="mt-1 flex items-center gap-3 sm:hidden">
           <span className="font-mono text-xs font-bold tabular-nums">
-            {entry.win_rate.toFixed(1)}% WR
+            {(entry.win_rate / 100).toFixed(2)} acertadas
           </span>
           <span className="text-xs text-muted-foreground">{entry.total_picks} picks</span>
         </div>
@@ -207,8 +207,8 @@ function LeaderboardRow({
       <div className="hidden items-center gap-6 sm:flex">
         <Stat
           icon={Target}
-          label="Win rate"
-          value={`${entry.win_rate.toFixed(1)}%`}
+          label="Cuotas acertadas"
+          value={(entry.win_rate / 100).toFixed(2)}
         />
         <Stat
           icon={Sparkles}

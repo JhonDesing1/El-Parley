@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { calculateParlay, generateDailyParlay } from "@/lib/betting/parlay-calculator";
+import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet } from "@/lib/betting/parlay-calculator";
 import type { Database } from "@/types/database";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -333,6 +333,71 @@ export async function GET(req: NextRequest) {
       buildPremiumTitle(premiumWithMeta, matchMap),
       `${premiumLegs.length} selecciones de value. Edge promedio del modelo: +${avgEdge.toFixed(1)}%.`,
       "premium",
+    );
+
+    if (id) generatedIds.push(id);
+  }
+
+  // ── Combinada 80%: prob combinada > 80% + cuota objetivo ≈ 3.5 ─────────
+  // Usa todos los candidatos (no excluye por usedMatchIds — es un producto distinto)
+  const combinada80Candidates = allCandidates
+    .filter((c) => !usedMatchIds.has(c.matchId))
+    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+
+  const combinada80Legs = generateValueParlay(combinada80Candidates, {
+    targetOdds: 3.5,
+    minCombinedProb: 0.80,
+    minIndividualProb: 0.82,
+  });
+
+  if (combinada80Legs && combinada80Legs.length >= 2) {
+    const c80WithMeta = combinada80Legs.map(
+      (l) => allCandidates.find(
+        (c) => c.matchId === l.matchId && c.market === l.market && c.selection === l.selection,
+      )!,
+    );
+
+    const combinedProb = combinada80Legs.reduce((p, l) => p * (l.modelProb ?? 0), 1);
+    const totalOdds = combinada80Legs.reduce((p, l) => p * l.decimalOdds, 1);
+
+    const id = await insertParlay(
+      c80WithMeta,
+      `Combinada 80% · x${totalOdds.toFixed(2)}`,
+      `${combinada80Legs.length} selecciones con ${(combinedProb * 100).toFixed(0)}% de probabilidad combinada. Cuotas acertadas históricas: 0.80.`,
+      "free",
+    );
+
+    if (id) {
+      generatedIds.push(id);
+      combinada80Legs.forEach((l) => usedMatchIds.add(l.matchId));
+    }
+  }
+
+  // ── FunBet del día: cuota acumulada objetivo ≈ 30, entretenimiento ────────
+  // Usa TODOS los candidatos (any confidence) ordenados por cuota descendente
+  const allCandidatesForFun = [...allCandidates].sort(
+    (a, b) => b.decimalOdds - a.decimalOdds,
+  );
+
+  const funBetLegs = generateFunBet(allCandidatesForFun, {
+    targetOdds: 30,
+    maxLegs: 10,
+  });
+
+  if (funBetLegs && funBetLegs.length >= 2) {
+    const funWithMeta = funBetLegs.map(
+      (l) => allCandidates.find(
+        (c) => c.matchId === l.matchId && c.market === l.market && c.selection === l.selection,
+      )!,
+    );
+
+    const funTotalOdds = funBetLegs.reduce((p, l) => p * l.decimalOdds, 1);
+
+    const id = await insertParlay(
+      funWithMeta,
+      `FunBet del día · x${funTotalOdds.toFixed(1)}`,
+      `Combinada de alto riesgo para los que quieren emoción. ${funBetLegs.length} selecciones. Cuota total estimada: x${funTotalOdds.toFixed(1)}.`,
+      "free",
     );
 
     if (id) generatedIds.push(id);

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, TrendingUp, Heart, Trophy, ClipboardList, ArrowRight, Code2, BarChart2, Send, Webhook, BookOpen } from "lucide-react";
+import { Sparkles, TrendingUp, Heart, Trophy, ClipboardList, ArrowRight, Code2, BarChart2, Send, Webhook, BookOpen, Target } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,16 @@ export default async function DashboardPage({
     .eq("user_id", user.id)
     .eq("result", "pending");
 
+  // Win rate de la plataforma para bets de alta confianza
+  const { data: highConfResolved } = await supabase
+    .from("value_bets")
+    .select("result")
+    .eq("confidence", "high")
+    .in("result", ["won", "lost"]);
+  const hcTotal = (highConfResolved ?? []).length;
+  const hcWon = (highConfResolved ?? []).filter((r) => r.result === "won").length;
+  const platformWinRate = hcTotal >= 10 ? Math.round((hcWon / hcTotal) * 100) : null;
+
   return (
     <div className="container max-w-6xl py-8">
       {params.welcome === "premium" && (
@@ -91,14 +101,14 @@ export default async function DashboardPage({
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <StatCard
           icon={TrendingUp}
-          label="ROI 30d"
+          label="Mi ROI 30d"
           value={`${profile?.roi_30d ?? 0}%`}
           valueClass={(profile?.roi_30d ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}
         />
         <StatCard
           icon={Trophy}
-          label="Win rate"
-          value={`${profile?.win_rate ?? 0}%`}
+          label="Cuotas acertadas"
+          value={(((profile?.win_rate ?? 0) / 100)).toFixed(2)}
           valueClass={
             (profile?.win_rate ?? 0) >= 55
               ? "text-emerald-400"
@@ -107,7 +117,21 @@ export default async function DashboardPage({
                 : "text-red-400"
           }
         />
-        <StatCard icon={Sparkles} label="Total picks" value={String(profile?.total_picks ?? 0)} />
+        <StatCard
+          icon={Target}
+          label="Cuotas acertadas"
+          value={platformWinRate !== null ? (platformWinRate / 100).toFixed(2) : "—"}
+          valueClass={
+            platformWinRate !== null
+              ? platformWinRate >= 60
+                ? "text-emerald-400"
+                : platformWinRate >= 50
+                  ? undefined
+                  : "text-red-400"
+              : "text-muted-foreground"
+          }
+          sub={hcTotal >= 10 ? `Plataforma · alta confianza · ${hcTotal} bets` : "Plataforma · sin datos aún"}
+        />
         <StatCard icon={Heart} label="Favoritos" value={String(favorites?.length ?? 0)} />
       </div>
 
@@ -274,11 +298,13 @@ function StatCard({
   label,
   value,
   valueClass,
+  sub,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   valueClass?: string;
+  sub?: string;
 }) {
   return (
     <Card className="p-5">
@@ -287,6 +313,7 @@ function StatCard({
         {label}
       </div>
       <div className={`font-mono text-3xl font-bold tabular-nums ${valueClass ?? ""}`}>{value}</div>
+      {sub && <div className="mt-1 text-[10px] text-muted-foreground">{sub}</div>}
     </Card>
   );
 }

@@ -175,8 +175,8 @@ export default async function MisPicksPage({
         />
         <StatCard
           icon={<Trophy className="h-4 w-4" />}
-          label="Win rate"
-          value={`${profile?.win_rate ?? 0}%`}
+          label="Cuotas acertadas"
+          value={((profile?.win_rate ?? 0) / 100).toFixed(2)}
           valueClass={
             (profile?.win_rate ?? 0) >= 55
               ? "text-emerald-400"

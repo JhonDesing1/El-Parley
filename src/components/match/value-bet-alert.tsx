@@ -69,9 +69,16 @@ export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAle
               <Sparkles className="h-5 w-5 text-value" />
             </div>
             <div>
-              <h3 className="font-display text-lg font-bold uppercase tracking-tight">
-                Value Bet Detectado
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-lg font-bold uppercase tracking-tight">
+                  Value Bet Detectado
+                </h3>
+                {valueBet.confidence === "high" && (
+                  <span className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    ⭐ Alta confianza
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Análisis algorítmico — Modelo Poisson + xG
               </p>

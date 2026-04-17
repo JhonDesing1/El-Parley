@@ -1,14 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParlayCard } from "@/components/parlay/parlay-card";
+import { FunBetCard } from "@/components/parlay/funbet-card";
+import { Combinada80Card } from "@/components/parlay/combinada80-card";
 import { isPremiumUser } from "@/lib/utils/auth";
 import { Layers, RefreshCw } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Parlays del día — El Parley",
+  title: "Combinadas del día — El Parley",
   description:
-    "Combinadas de alto valor seleccionadas algorítmicamente. Probabilidad combinada > 65%.",
+    "Combinadas con probabilidad matemática superior al 80%. FunBet diario con cuota x30.",
 };
 
 export const revalidate = 600; // 10 min
@@ -37,10 +39,16 @@ export default async function ParlaysPage() {
     .gte("valid_until", new Date().toISOString())
     .order("created_at", { ascending: false });
 
-  const free = (parlays ?? []).filter((p) => p.tier === "free");
-  const premium = (parlays ?? []).filter((p) => p.tier !== "free");
+  // Separar por tipo usando la convención de título
+  const isFunBet = (p: any) => (p.title as string)?.startsWith("FunBet");
+  const isCombi80 = (p: any) => (p.title as string)?.startsWith("Combinada 80%");
 
-  // Última actualización: el parlay más reciente
+  const funBets = (parlays ?? []).filter(isFunBet);
+  const combinadas80 = (parlays ?? []).filter(isCombi80);
+  const regularParlays = (parlays ?? []).filter((p) => !isFunBet(p) && !isCombi80(p));
+  const premium = regularParlays.filter((p: any) => p.tier !== "free");
+  const free = regularParlays.filter((p: any) => p.tier === "free");
+
   const lastGenerated =
     parlays && parlays.length > 0 && parlays[0].created_at
       ? new Date(parlays[0].created_at).toLocaleString("es-CO", {
@@ -51,16 +59,18 @@ export default async function ParlaysPage() {
         })
       : null;
 
+  const hasContent = (parlays ?? []).length > 0;
+
   return (
     <div className="container max-w-6xl py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-            Parlays del día
+            Combinadas del día
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Combinadas seleccionadas por nuestro modelo matemático. Cada selección tiene
-            edge positivo individual y la probabilidad combinada supera el umbral mínimo.
+            Tres tipos de combinada: segura (80%+ de probabilidad), de valor (edge positivo)
+            y FunBet (alto riesgo, máxima emoción).
           </p>
         </div>
         {lastGenerated && (
@@ -71,75 +81,104 @@ export default async function ParlaysPage() {
         )}
       </header>
 
-      {(!parlays || parlays.length === 0) ? (
+      {!hasContent ? (
         <EmptyState />
       ) : (
-        <Tabs defaultValue="all" className="w-full">
-          <TabsList>
-            <TabsTrigger value="all">
-              Todos
-              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                {parlays.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="free">
-              Gratis
-              {free.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                  {free.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="premium">
-              Premium
-              {premium.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                  {premium.length}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all" className="mt-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {(parlays ?? []).map((parlay: any) => (
-                <ParlayCard
-                  key={parlay.id}
-                  parlay={parlay}
-                  isLocked={parlay.tier !== "free" && !isPremium}
-                />
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="free" className="mt-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {free.length === 0 ? (
-                <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
-                  No hay parlays gratuitos disponibles hoy.
+        <div className="space-y-10">
+          {/* ── FunBet del día ───────────────────────────────────── */}
+          {funBets.length > 0 && (
+            <section>
+              <div className="mb-4">
+                <h2 className="font-display text-2xl font-bold">FunBet del día</h2>
+                <p className="text-sm text-muted-foreground">
+                  Alto riesgo, máxima emoción. Cuota acumulada ~x30. Una por día.
                 </p>
-              ) : (
-                free.map((parlay: any) => (
-                  <ParlayCard key={parlay.id} parlay={parlay} />
-                ))
-              )}
-            </div>
-          </TabsContent>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {funBets.map((p: any) => (
+                  <FunBetCard key={p.id} parlay={p} />
+                ))}
+              </div>
+            </section>
+          )}
 
-          <TabsContent value="premium" className="mt-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {premium.length === 0 ? (
-                <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
-                  No hay parlays premium disponibles hoy.
+          {/* ── Combinadas 80% ───────────────────────────────────── */}
+          {combinadas80.length > 0 && (
+            <section>
+              <div className="mb-4">
+                <h2 className="font-display text-2xl font-bold">Combinadas 80%</h2>
+                <p className="text-sm text-muted-foreground">
+                  Probabilidad combinada del modelo superior al 80%. Cuota objetivo x3.5.
                 </p>
-              ) : (
-                premium.map((parlay: any) => (
-                  <ParlayCard key={parlay.id} parlay={parlay} isLocked={!isPremium} />
-                ))
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {combinadas80.map((p: any) => (
+                  <Combinada80Card key={p.id} parlay={p} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── Parlays regulares ────────────────────────────────── */}
+          {regularParlays.length > 0 && (
+            <section>
+              <div className="mb-4">
+                <h2 className="font-display text-2xl font-bold">Combinadas de valor</h2>
+                <p className="text-sm text-muted-foreground">
+                  Edge positivo individual en cada selección. Modelo Poisson + xG.
+                </p>
+              </div>
+              <Tabs defaultValue="free" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="free">
+                    Gratis
+                    {free.length > 0 && (
+                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        {free.length}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="premium">
+                    Premium
+                    {premium.length > 0 && (
+                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        {premium.length}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="free" className="mt-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {free.length === 0 ? (
+                      <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
+                        No hay combinadas gratuitas disponibles hoy.
+                      </p>
+                    ) : (
+                      free.map((parlay: any) => (
+                        <ParlayCard key={parlay.id} parlay={parlay} />
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="premium" className="mt-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {premium.length === 0 ? (
+                      <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
+                        No hay combinadas premium disponibles hoy.
+                      </p>
+                    ) : (
+                      premium.map((parlay: any) => (
+                        <ParlayCard key={parlay.id} parlay={parlay} isLocked={!isPremium} />
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </section>
+          )}
+        </div>
       )}
     </div>
   );
@@ -149,9 +188,9 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/10 py-20 text-center">
       <Layers className="mb-4 h-12 w-12 text-muted-foreground/30" />
-      <h2 className="text-lg font-semibold">Sin parlays hoy todavía</h2>
+      <h2 className="text-lg font-semibold">Sin combinadas hoy todavía</h2>
       <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-        Nuestro modelo genera parlays automáticamente cada mañana a las 6, 10 y 14 UTC.
+        Nuestro modelo genera combinadas automáticamente cada mañana a las 6, 10 y 14 UTC.
         Vuelve en un momento o revisa las value bets individuales.
       </p>
     </div>

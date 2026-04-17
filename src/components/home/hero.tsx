@@ -9,24 +9,28 @@ const stats = [
     icon: TrendingUp,
     value: "+12.4%",
     label: "ROI promedio",
+    sub: "sobre bankroll inicial",
     color: "text-value",
   },
   {
     icon: Target,
-    value: "58.2%",
-    label: "Win rate",
+    value: "0.60",
+    label: "Cuotas acertadas",
+    sub: "Premium · alta confianza",
     color: "text-value",
   },
   {
     icon: Zap,
     value: "~24",
     label: "Value bets/día",
+    sub: "en todas las ligas",
     color: "text-primary",
   },
   {
     icon: BarChart3,
     value: "4",
-    label: "Cuotas comparadas",
+    label: "Casas comparadas",
+    sub: "Betplay, Wplay, Codere…",
     color: "text-primary",
   },
 ]
@@ -95,7 +99,7 @@ export function Hero() {
 
           {/* Right content - Stats grid */}
           <div className="grid grid-cols-2 gap-4">
-            {stats.map((stat) => (
+            {(stats as typeof stats).map((stat) => (
               <div
                 key={stat.label}
                 className="group relative overflow-hidden rounded-2xl border border-border bg-card/50 p-6 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card"
@@ -103,7 +107,7 @@ export function Hero() {
                 {/* Card glow effect */}
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-value/5 opacity-0 transition-opacity group-hover:opacity-100" />
 
-                <div className="relative space-y-3">
+                <div className="relative space-y-2">
                   <div className={`inline-flex rounded-lg bg-secondary p-2 ${stat.color}`}>
                     <stat.icon className="h-5 w-5" />
                   </div>
@@ -111,6 +115,7 @@ export function Hero() {
                     {stat.value}
                   </div>
                   <div className="text-sm text-muted-foreground">{stat.label}</div>
+                  <div className="text-[10px] text-muted-foreground/60">{stat.sub}</div>
                 </div>
               </div>
             ))}
