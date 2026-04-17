@@ -11,12 +11,12 @@ export interface MPPlanConfig {
 export const MP_PLANS: Record<MPPlan, MPPlanConfig> = {
   monthly: {
     referencePrefix: "EP-M",
-    amount: 5000,
+    amount: 10000,
     description: "El Parley Premium — Mensual",
   },
   yearly: {
     referencePrefix: "EP-Y",
-    amount: Math.round(5000 * 12 * 0.8),
+    amount: Math.round(10000 * 12 * 0.8),
     description: "El Parley Premium — Anual",
   },
 };

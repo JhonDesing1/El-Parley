@@ -32,8 +32,8 @@ const plans = [
   {
     name: "Premium",
     icon: Crown,
-    monthlyPrice: 5000,
-    yearlyPrice: Math.round(5000 * 12 * 0.8),
+    monthlyPrice: 10000,
+    yearlyPrice: Math.round(10000 * 12 * 0.8),
     description: "Para apostadores serios que buscan ventaja competitiva",
     features: [
       { name: "Value bets básicas (6/día)", included: true },

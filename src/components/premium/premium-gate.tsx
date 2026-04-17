@@ -46,7 +46,7 @@ export function PremiumGate({
             </Link>
           </Button>
           <p className="mt-3 text-xs text-muted-foreground">
-            Desde $5.000 COP/mes · Cancela cuando quieras
+            Desde $10.000 COP/mes · Cancela cuando quieras
           </p>
         </div>
       </div>
