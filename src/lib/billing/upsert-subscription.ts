@@ -5,7 +5,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export interface UpsertSubscriptionParams {
   supabase: AdminClient;
   userId: string;
-  provider: "stripe" | "payu" | "mercadopago";
+  provider: "mercadopago";
   providerCustomerId: string | null;
   providerSubscriptionId: string;
   tier: "premium" | "pro";

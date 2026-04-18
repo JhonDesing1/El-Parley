@@ -53,6 +53,9 @@ export const BOOKMAKERS: Record<string, BookmakerConfig> = {
 export function buildAffiliateUrl(slug: string): string {
   const cfg = BOOKMAKERS[slug];
   if (!cfg) return "#";
-  const tag = process.env[cfg.envTag] ?? "El Parley";
-  return `${cfg.affiliateBase}${tag}`;
+  const value = process.env[cfg.envTag] ?? "";
+  if (!value) return cfg.affiliateBase;
+  // Si el valor es una URL completa, usarla directamente
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  return `${cfg.affiliateBase}${value}`;
 }

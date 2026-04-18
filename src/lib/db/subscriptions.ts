@@ -35,16 +35,6 @@ export function subscriptionsRepo(db: DB) {
         .maybeSingle();
     },
 
-    /** Suscripciones PayU incompletas más antiguas que `threshold`. Usado en sync-payu. */
-    async getIncompletePayU(threshold: string) {
-      return db
-        .from("subscriptions")
-        .select("id, user_id, provider_subscription_id, updated_at")
-        .eq("provider", "payu")
-        .eq("status", "incomplete")
-        .lt("updated_at", threshold);
-    },
-
     /** Actualiza el estado de una suscripción por su ID. */
     async update(id: string, data: Update<"subscriptions">) {
       return db.from("subscriptions").update(data).eq("id", id);

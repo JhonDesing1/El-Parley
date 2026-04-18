@@ -10,7 +10,6 @@ const RATE_LIMIT_RULES: Array<[string, number, number]> = [
   ["/api/track/affiliate", 30, 60_000],
   // Checkout: authenticated but limit to prevent session-stuffing
   ["/api/checkout", 10, 60_000],
-  ["/api/checkout-payu", 10, 60_000],
 ];
 
 function getClientIp(req: NextRequest): string {

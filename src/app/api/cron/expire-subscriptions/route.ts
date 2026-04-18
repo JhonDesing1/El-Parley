@@ -7,15 +7,13 @@ export const maxDuration = 30;
 /**
  * Vercel Cron — runs daily at 05:00 UTC.
  *
- * Belt-and-suspenders subscription hygiene — catches cases where Stripe/PayU
- * webhooks were missed or delayed:
+ * Belt-and-suspenders subscription hygiene — catches cases where MP webhooks
+ * were missed or delayed:
  *
  *  1. Active subscriptions whose current_period_end has passed → mark past_due
  *     and downgrade profile to free.
  *  2. past_due subscriptions older than 14 days with no update → cancel them
  *     and downgrade profile (safety net for webhook delivery failures).
- *
- * PayU incomplete subscriptions are handled separately by /api/cron/sync-payu.
  */
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
