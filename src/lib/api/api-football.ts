@@ -29,16 +29,60 @@ function headers() {
   };
 }
 
+/** Statuses worth retrying — transient failures only. */
+function isRetryable(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+const MAX_ATTEMPTS = 3;
+
+/**
+ * Core HTTP client for API-Football with exponential-backoff retry.
+ *
+ * Retries up to 2 times on network errors, 429 (rate-limited) and 5xx
+ * server errors. Does NOT retry on 4xx client errors (bad key, not found).
+ * Delays: ~1 s → ~2 s (with ±20% jitter to avoid thundering-herd).
+ */
 async function af<T = any>(path: string, params: Record<string, string | number> = {}): Promise<T> {
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  const res = await fetch(url.toString(), { headers: headers(), cache: "no-store" });
-  if (!res.ok) throw new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
-  const json = await res.json();
-  if (json.errors && Object.keys(json.errors).length > 0) {
-    throw new Error(`API-Football error: ${JSON.stringify(json.errors)}`);
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url.toString(), { headers: headers(), cache: "no-store" });
+
+      if (!res.ok) {
+        if (!isRetryable(res.status) || attempt === MAX_ATTEMPTS) {
+          throw new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
+        }
+        lastError = new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
+      } else {
+        const json = await res.json();
+        if (json.errors && Object.keys(json.errors).length > 0) {
+          throw new Error(`API-Football error: ${JSON.stringify(json.errors)}`);
+        }
+        return json.response as T;
+      }
+    } catch (err) {
+      // Re-throw immediately on the last attempt or non-retryable errors
+      if (attempt === MAX_ATTEMPTS) throw err;
+      // Only retry on network-level errors (fetch throws) or saved retryable HTTP errors
+      const isNetworkError = !(err instanceof Error && err.message.startsWith("API-Football"));
+      if (!isNetworkError && lastError === undefined) throw err;
+      lastError = err;
+    }
+
+    // Exponential backoff with ±20% jitter: 1s, 2s
+    const baseMs = 1000 * Math.pow(2, attempt - 1);
+    const jitter = baseMs * 0.2 * (Math.random() * 2 - 1);
+    const delay = Math.round(baseMs + jitter);
+    console.warn(`[api-football] Retry ${attempt}/${MAX_ATTEMPTS - 1} for ${path} in ${delay}ms`);
+    await new Promise((r) => setTimeout(r, delay));
   }
-  return json.response as T;
+
+  throw lastError;
 }
 
 interface AfFixture {
