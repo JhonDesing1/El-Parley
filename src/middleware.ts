@@ -1,15 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
-import { checkRateLimit } from "@/lib/security/rate-limit";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { isKnownBadBot } from "@/lib/security/bot-detection";
 
 // ─── Rate-limit rules for public/sensitive API routes ────────────────────────
 // [path prefix, max requests, window in ms]
+// Uses Upstash Redis when UPSTASH_REDIS_REST_URL is set, in-memory otherwise.
 const RATE_LIMIT_RULES: Array<[string, number, number]> = [
   // Affiliate clicks: unauthenticated, writes to DB — tight limit
   ["/api/track/affiliate", 30, 60_000],
   // Checkout: authenticated but limit to prevent session-stuffing
-  ["/api/checkout", 10, 60_000],
+  ["/api/checkout-mp", 10, 60_000],
+  // Webhook: MP IPN — allow retries but cap abuse
+  ["/api/webhooks/mp", 60, 60_000],
 ];
 
 function getClientIp(req: NextRequest): string {
@@ -37,7 +40,7 @@ export async function middleware(request: NextRequest) {
     const ip = getClientIp(request);
     for (const [prefix, limit, windowMs] of RATE_LIMIT_RULES) {
       if (pathname.startsWith(prefix)) {
-        const result = checkRateLimit(`${ip}:${prefix}`, limit, windowMs);
+        const result = await rateLimit(`${ip}:${prefix}`, limit, windowMs);
         if (!result.allowed) {
           const retryAfter = Math.ceil((result.resetAt - Date.now()) / 1000);
           return new NextResponse(JSON.stringify({ error: "Too Many Requests" }), {
