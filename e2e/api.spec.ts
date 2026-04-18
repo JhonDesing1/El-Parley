@@ -11,8 +11,12 @@ test.describe("Cron endpoints — authorization", () => {
   const cronRoutes = [
     "/api/cron/sync-fixtures",
     "/api/cron/sync-live-odds",
+    "/api/cron/sync-odds",
     "/api/cron/detect-value-bets",
+    "/api/cron/generate-parlays",
+    "/api/cron/generate-blog",
     "/api/cron/sync-results",
+    "/api/cron/sync-injuries",
     "/api/cron/expire-subscriptions",
     "/api/cron/cleanup-odds",
     "/api/cron/refresh-leaderboard",
@@ -57,7 +61,8 @@ test.describe("Affiliate tracking endpoint", () => {
 
   test("GET with valid book redirects to bookmaker (302)", async ({ request }) => {
     // Valid bookmaker slug — the route redirects to affiliate URL
-    const response = await request.get("/api/track/affiliate?book=betplay", {
+    // Using bet365 (current active bookmaker config)
+    const response = await request.get("/api/track/affiliate?book=bet365", {
       maxRedirects: 0,
     });
     expect([301, 302, 307, 308]).toContain(response.status());
@@ -71,29 +76,6 @@ test.describe("Affiliate tracking endpoint", () => {
   });
 });
 
-test.describe("Stripe webhook endpoint", () => {
-  test("POST without signature returns 400", async ({ request }) => {
-    const response = await request.post("/api/webhooks/stripe", {
-      data: { type: "checkout.session.completed" },
-      headers: { "content-type": "application/json" },
-    });
-    // Without a valid Stripe-Signature header, the webhook should reject the request
-    expect([400, 401]).toContain(response.status());
-  });
-});
-
-test.describe("PayU webhook endpoint", () => {
-  test("POST with empty form data always returns 200 (PayU retry prevention)", async ({
-    request,
-  }) => {
-    // PayU sends application/x-www-form-urlencoded — must use form encoding.
-    // The route always returns 200 even for invalid signature to prevent retries.
-    const response = await request.post("/api/webhooks/payu", {
-      form: { sign: "invalid", reference_sale: "test", value: "0", currency: "COP", state_pol: "4" },
-    });
-    expect(response.status()).toBe(200);
-  });
-});
 
 test.describe("Notifications endpoint", () => {
   test("GET /api/notifications returns 401 for unauthenticated request", async ({

@@ -44,10 +44,9 @@ test.describe("Premium page", () => {
     await expect(page.locator("h3", { hasText: "Pro" })).toBeVisible();
   });
 
-  test("premium plan shows payment buttons", async ({ page }) => {
+  test("premium plan shows Mercado Pago subscribe button", async ({ page }) => {
     await page.goto("/premium");
-    await expect(page.locator("text=Pagar en COP · PayU")).toBeVisible();
-    await expect(page.locator("text=Pagar en USD · Stripe")).toBeVisible();
+    await expect(page.locator("text=Suscribirse")).toBeVisible();
   });
 
   test("pro plan shows 'Próximamente' disabled button", async ({ page }) => {
