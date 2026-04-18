@@ -11,9 +11,6 @@ export const maxDuration = 60;
 /**
  * Vercel Cron — corre cada 10 minutos.
  *
- * Implementación temporal directa en Next.js mientras la Supabase Edge Function
- * detect-value-bets no está desplegada en el pipeline de CI/CD.
- *
  * Lógica:
  *  1. Lee partidos próximos 48h con xG cargado
  *  2. Calcula probabilidades Poisson + Dixon-Coles con la lib de betting
