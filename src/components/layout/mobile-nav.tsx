@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import Link, { LinkProps } from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Zap, TrendingUp, Newspaper, ClipboardList, Sparkles, BookOpen } from "lucide-react";
@@ -33,11 +33,12 @@ export function MobileNav({
   tier?: "free" | "premium" | "pro";
 }) {
   const [open, setOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const pathname = usePathname();
 
-  // Cerrar al navegar
+  // Cerrar al navegar — startTransition evita cascading renders
   useEffect(() => {
-    setOpen(false);
+    startTransition(() => setOpen(false));
   }, [pathname]);
 
   // Bloquear scroll del body cuando el menú está abierto

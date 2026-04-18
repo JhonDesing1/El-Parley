@@ -25,14 +25,16 @@ export function RoiChart({ picks }: { picks: ChartPickData[] }) {
       .filter((p) => (p.result === "won" || p.result === "lost") && p.profit_loss != null)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    let cumulative = 0;
-    return resolved.map((p) => {
-      cumulative += p.profit_loss!;
-      return {
-        date: format(new Date(p.created_at), "d MMM", { locale: es }),
-        pnl: Math.round(cumulative),
-      };
-    });
+    return resolved.reduce<{ date: string; pnl: number }[]>((acc, p) => {
+      const prev = acc.length > 0 ? acc[acc.length - 1].pnl : 0;
+      return [
+        ...acc,
+        {
+          date: format(new Date(p.created_at), "d MMM", { locale: es }),
+          pnl: Math.round(prev + p.profit_loss!),
+        },
+      ];
+    }, []);
   }, [picks]);
 
   if (data.length < 2) return null;
