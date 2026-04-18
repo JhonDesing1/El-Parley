@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/sync-live-odds",
-      "schedule": "0 12 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/sync-fixtures",
