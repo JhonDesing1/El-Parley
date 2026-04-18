@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
 
   if (expiredErr) {
     console.error("[expire-subscriptions] query expired:", expiredErr.message);
+    await notifyAdminError("expire-subscriptions", `Error al consultar subs activas: ${expiredErr.message}`);
   } else if (expired?.length) {
     const ids = expired.map((s) => s.id);
     await supabase
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
 
   if (staleErr) {
     console.error("[expire-subscriptions] query stale:", staleErr.message);
+    await notifyAdminError("expire-subscriptions", `Error al consultar subs past_due: ${staleErr.message}`);
   } else if (stale?.length) {
     const ids = stale.map((s) => s.id);
     await supabase

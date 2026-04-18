@@ -76,7 +76,13 @@ export async function GET(req: NextRequest) {
     .not("model_expected_goals_home", "is", null);
 
   if (excludeIds.length > 0) {
-    query = query.not("id", "in", `(${excludeIds.join(",")})`);
+    // Validate all IDs are positive integers before interpolating into the filter string.
+    // Although these come from the DB (not user input), this guards against unexpected
+    // type coercion that could produce a malformed PostgREST filter.
+    const safeIds = excludeIds.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (safeIds.length > 0) {
+      query = query.not("id", "in", `(${safeIds.join(",")})`);
+    }
   }
 
   const { data: matches, error } = await query;
@@ -130,6 +136,7 @@ export async function GET(req: NextRequest) {
         edge: result.edge,
         kelly_fraction: result.kelly,
         confidence: result.confidence,
+        result: "pending" as const,
         // Las de edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,
         reasoning: `Modelo estima ${(modelProb * 100).toFixed(0)}% vs ${(result.impliedProb * 100).toFixed(0)}% implícita. Edge +${(result.edge * 100).toFixed(1)}%.`,

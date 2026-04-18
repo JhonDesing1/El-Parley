@@ -1,4 +1,6 @@
-﻿const BASE = `https://${process.env.API_FOOTBALL_HOST ?? "v3.football.api-sports.io"}`;
+﻿import { poissonPMF } from "@/lib/betting/poisson";
+
+const BASE = `https://${process.env.API_FOOTBALL_HOST ?? "v3.football.api-sports.io"}`;
 
 /**
  * Leagues that get priority API budget during high-traffic events
@@ -106,16 +108,19 @@ function mapStatus(short: string): "scheduled" | "live" | "finished" | "postpone
   return "canceled";
 }
 
+// Mapeo de nombres de API-Football → slug interno.
+// API-Football (free tier) retorna casas internacionales, no colombianas.
+// Los slugs deben coincidir con los IDs insertados en public.bookmakers.
 const BOOKMAKER_NAME_TO_SLUG: Record<string, string> = {
-  "1xBet": "1xbet",
-  "Bet365": "betplay",
-  "Marathonbet": "wplay",
-  "Pinnacle": "codere",
-  "Betfair": "rivalo",
+  "Bet365":      "bet365",
+  "Pinnacle":    "pinnacle",
+  "1xBet":       "1xbet",
+  "Marathonbet": "marathonbet",
+  "Betfair":     "betfair",
 };
 
 const SLUG_TO_ID: Record<string, number> = {
-  betplay: 1, wplay: 2, codere: 3, rivalo: 4, "1xbet": 5,
+  bet365: 1, pinnacle: 2, "1xbet": 3, marathonbet: 4, betfair: 5,
 };
 
 const MARKET_MAP: Record<string, { market: string; mapValue: (v: string) => string | null }> = {
@@ -184,25 +189,161 @@ export async function fetchFixturesForLeague(leagueId: number, season: number, f
 interface AfPrediction {
   predictions: {
     goals: { home: string | null; away: string | null };
+    percent: { home: string; draw: string; away: string } | null;
   };
 }
 
 /**
- * Devuelve los xG estimados por API-Football para un fixture.
- * El endpoint /predictions combina estadísticas históricas para producir
- * goles esperados home/away. Retorna null si no hay datos.
+ * Derives (homeXg, awayXg) from 1x2 win probabilities by finding the xG pair
+ * that best reproduces those probabilities under a Poisson model.
+ *
+ * Uses a coarse+fine grid search — accurate enough for our betting model.
+ * Returns null if the fit error is too large (> 4pp per market).
+ */
+function deriveXgFromProbabilities(
+  targetHome: number,
+  targetDraw: number,
+  targetAway: number,
+): { homeXg: number; awayXg: number } | null {
+  // Validate inputs sum to ~1 and are all positive
+  if (
+    targetHome <= 0 ||
+    targetDraw <= 0 ||
+    targetAway <= 0 ||
+    Math.abs(targetHome + targetDraw + targetAway - 1) > 0.06
+  )
+    return null;
+
+  let bestFit = Infinity;
+  let bestH = 0;
+  let bestA = 0;
+
+  // Coarse grid: 0.4..3.2 step 0.2 (→ 15x15 = 225 evaluations)
+  for (let h = 0.4; h <= 3.2; h += 0.2) {
+    for (let a = 0.4; a <= 3.2; a += 0.2) {
+      const fit = poissonFit(h, a, targetHome, targetDraw, targetAway);
+      if (fit < bestFit) {
+        bestFit = fit;
+        bestH = h;
+        bestA = a;
+      }
+    }
+  }
+
+  // Fine grid around best coarse point
+  for (let h = bestH - 0.15; h <= bestH + 0.15; h += 0.05) {
+    for (let a = bestA - 0.15; a <= bestA + 0.15; a += 0.05) {
+      if (h <= 0 || a <= 0) continue;
+      const fit = poissonFit(h, a, targetHome, targetDraw, targetAway);
+      if (fit < bestFit) {
+        bestFit = fit;
+        bestH = h;
+        bestA = a;
+      }
+    }
+  }
+
+  // Accept if total squared error in home+draw is under 0.04² + 0.04² = 0.0032
+  return bestFit < 0.0032 ? { homeXg: +bestH.toFixed(2), awayXg: +bestA.toFixed(2) } : null;
+}
+
+/** Sum of squared errors for home+draw probabilities under a Poisson model. */
+function poissonFit(
+  homeXg: number,
+  awayXg: number,
+  targetHome: number,
+  targetDraw: number,
+  _targetAway: number,
+): number {
+  // Inline Poisson 1x2 computation (no Dixon-Coles to keep it fast)
+  let home = 0;
+  let draw = 0;
+  for (let h = 0; h <= 7; h++) {
+    const ph = poissonPMF(h, homeXg);
+    if (ph < 1e-9) continue;
+    for (let a = 0; a <= 7; a++) {
+      const pa = poissonPMF(a, awayXg);
+      if (pa < 1e-9) continue;
+      const p = ph * pa;
+      if (h > a) home += p;
+      else if (h === a) draw += p;
+    }
+  }
+  return (home - targetHome) ** 2 + (draw - targetDraw) ** 2;
+}
+
+/**
+ * xG promedio por liga para usar como fallback cuando el endpoint /predictions
+ * no devuelve valores válidos. Basado en promedios históricos de goles/partido
+ * en temporadas recientes (fuente: FBRef/Understat agregados).
+ *
+ * Formato: [homeXg, awayXg]
+ */
+const LEAGUE_AVG_XG: Record<number, [number, number]> = {
+  39:  [1.55, 1.20], // Premier League
+  140: [1.45, 1.10], // La Liga
+  135: [1.50, 1.15], // Serie A
+  78:  [1.60, 1.25], // Bundesliga
+  61:  [1.40, 1.10], // Ligue 1
+  2:   [1.55, 1.15], // Champions League
+  3:   [1.50, 1.20], // Europa League
+  848: [1.45, 1.15], // Conference League
+  13:  [1.40, 1.10], // Copa Libertadores
+  239: [1.35, 1.10], // Liga BetPlay Colombia
+};
+
+const DEFAULT_XG: [number, number] = [1.40, 1.10]; // fallback genérico
+
+/**
+ * Devuelve los xG estimados para un fixture.
+ * Intenta el endpoint /predictions de API-Football primero; si retorna
+ * valores inválidos (negativos o cero), usa promedios históricos por liga
+ * como fallback razonable para el modelo Poisson.
  */
 export async function fetchPredictionsForFixture(
   fixtureId: number,
+  leagueId?: number,
 ): Promise<{ homeXg: number; awayXg: number } | null> {
-  const response = await af<AfPrediction[]>("/predictions", { fixture: fixtureId });
-  if (!response.length) return null;
+  try {
+    const response = await af<AfPrediction[]>("/predictions", { fixture: fixtureId });
+    if (response.length) {
+      const pred = response[0].predictions;
 
-  const goals = response[0].predictions?.goals;
-  const homeXg = goals?.home != null ? parseFloat(goals.home) : NaN;
-  const awayXg = goals?.away != null ? parseFloat(goals.away) : NaN;
+      // 1. Try explicit xG from /predictions goals field (valid when > 0)
+      const goals = pred?.goals;
+      const homeXg = goals?.home != null ? parseFloat(goals.home) : NaN;
+      const awayXg = goals?.away != null ? parseFloat(goals.away) : NaN;
+      if (!isNaN(homeXg) && !isNaN(awayXg) && homeXg > 0 && awayXg > 0) {
+        return { homeXg, awayXg };
+      }
 
-  if (isNaN(homeXg) || isNaN(awayXg) || homeXg <= 0 || awayXg <= 0) return null;
+      // 2. Derive xG from the 1x2 percent prediction (match-specific model)
+      // The API gives coarse values (5% increments) so we preserve the home/away
+      // ratio from the derivation but scale totals up to realistic league averages.
+      const pct = pred?.percent;
+      if (pct) {
+        const ph = parseFloat(pct.home) / 100;
+        const pd = parseFloat(pct.draw) / 100;
+        const pa = parseFloat(pct.away) / 100;
+        const derived = deriveXgFromProbabilities(ph, pd, pa);
+        if (derived) {
+          const [leagueHome, leagueAway] = (leagueId ? LEAGUE_AVG_XG[leagueId] : null) ?? DEFAULT_XG;
+          const leagueTotal = leagueHome + leagueAway;
+          const derivedTotal = derived.homeXg + derived.awayXg;
+          const scale = leagueTotal / derivedTotal;
+          return {
+            homeXg: +(derived.homeXg * scale).toFixed(2),
+            awayXg: +(derived.awayXg * scale).toFixed(2),
+          };
+        }
+      }
+    }
+  } catch {
+    // Fallo silencioso — pasamos al fallback
+  }
+
+  // 3. Fallback: promedios históricos por liga (genéricos, sin calidad de equipo)
+  const [homeXg, awayXg] = (leagueId ? LEAGUE_AVG_XG[leagueId] : null) ?? DEFAULT_XG;
   return { homeXg, awayXg };
 }
 

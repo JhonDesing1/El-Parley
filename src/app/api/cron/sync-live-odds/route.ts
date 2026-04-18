@@ -5,6 +5,7 @@ import { fetchOddsForFixtures } from "@/lib/api/api-football";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import { detectValueBet } from "@/lib/betting/value-bet";
+import { notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -134,6 +135,7 @@ export async function GET(req: NextRequest) {
               edge: result.edge,
               kelly_fraction: result.kelly,
               confidence: result.confidence,
+              result: "pending" as const,
               is_premium: result.edge < 0.06,
               reasoning: `Modelo estima ${(modelProb * 100).toFixed(0)}% vs ${(result.impliedProb * 100).toFixed(0)}% implícita. Edge +${(result.edge * 100).toFixed(1)}%.`,
             });
@@ -165,7 +167,9 @@ export async function GET(req: NextRequest) {
       valueBetsDetected += r.value.newBets;
       revalidated.push(r.value.matchId);
     } else {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
       console.error("[sync-live-odds] match failed:", r.reason);
+      await notifyAdminError("sync-live-odds", msg);
     }
   }
 

@@ -5,6 +5,10 @@
  *  - Quiet hours: 10 pm – 7 am hora Colombia (UTC-5, sin DST)
  *  - Cada tipo de alerta respeta la preferencia individual del usuario
  *  - Los errores de Telegram nunca propagan — no bloquean el cron
+ *
+ * Para alertas de errores a administradores:
+ *  - Requiere TELEGRAM_ADMIN_CHAT_ID en las variables de entorno
+ *  - No respeta quiet hours — los errores de cron son siempre urgentes
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
@@ -87,4 +91,26 @@ export async function notifyProUsers(
   await Promise.allSettled(
     recipients.map((p) => sendTelegramMessage(p.telegram_chat_id!, text)),
   );
+}
+
+/**
+ * Envía una alerta de error al chat de administración.
+ * Requiere TELEGRAM_ADMIN_CHAT_ID en env. No respeta quiet hours.
+ *
+ * Uso recomendado en crons:
+ *   await notifyAdminError("sync-fixtures", error.message);
+ */
+export async function notifyAdminError(
+  cronName: string,
+  message: string,
+): Promise<void> {
+  const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  if (!adminChatId) return;
+
+  const text =
+    `⚠️ <b>Error en cron: ${cronName}</b>\n\n` +
+    `<code>${message.slice(0, 800)}</code>\n\n` +
+    `<i>${new Date().toISOString()}</i>`;
+
+  await sendTelegramMessage(adminChatId, text);
 }

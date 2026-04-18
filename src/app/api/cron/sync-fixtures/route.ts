@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fetchFixturesForLeague, fetchPredictionsForFixture, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
+import { notifyAdminError } from "@/lib/telegram/send";
+
+// Máximo de fixtures con predicción (xG) por ejecución.
+// Con el plan Pro de API-Football (7500 req/día) podemos cubrir todos
+// los partidos de las próximas 72h sin preocuparnos por el presupuesto diario.
+const XG_PER_RUN_LIMIT = 500;
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /**
- * Cron cada 6 horas — refresca fixtures de las próximas 2 semanas
- * para todas las ligas marcadas como featured.
+ * Cron cada 6 horas — refresca fixtures de las próximas 4 semanas
+ * para todas las ligas marcadas como featured, usando from/to del plan Pro.
  */
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -22,12 +28,14 @@ export async function GET(req: NextRequest) {
     .eq("is_featured", true);
 
   if (leaguesError) {
+    await notifyAdminError("sync-fixtures", `Supabase error al leer leagues: ${leaguesError.message}`);
     return NextResponse.json(
       { error: "supabase error", detail: leaguesError.message },
       { status: 500 },
     );
   }
   if (!leagues || leagues.length === 0) {
+    await notifyAdminError("sync-fixtures", "No se encontraron leagues con is_featured=true. Verifica la tabla public.leagues.");
     return NextResponse.json(
       { error: "no leagues found", hint: "verify is_featured=true rows exist in public.leagues" },
       { status: 500 },
@@ -72,10 +80,12 @@ export async function GET(req: NextRequest) {
         totalFixtures += fixtures.length;
       }
 
-      // Throttle por rate limit de API-Football
-      await new Promise((r) => setTimeout(r, 1500));
+      // Throttle breve para no golpear el rate limit por segundo del plan Pro
+      await new Promise((r) => setTimeout(r, 250));
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error(`[sync-fixtures] league ${league.id}:`, err);
+      await notifyAdminError("sync-fixtures", `Error en league ${league.id}: ${msg}`);
     }
   }
 
@@ -93,7 +103,8 @@ export async function GET(req: NextRequest) {
     .gte("kickoff", new Date().toISOString())
     .lte("kickoff", in72h)
     .eq("status", "scheduled")
-    .is("model_expected_goals_home", null);
+    .is("model_expected_goals_home", null)
+    .limit(XG_PER_RUN_LIMIT);
 
   let xgUpdated = 0;
 
@@ -119,8 +130,7 @@ export async function GET(req: NextRequest) {
           .eq("id", match.id);
 
         xgUpdated++;
-        // Throttle para no exceder rate limits
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 250));
       } catch (err) {
         console.error(`[sync-fixtures] predictions fixture=${match.id}:`, err);
       }

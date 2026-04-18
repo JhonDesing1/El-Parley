@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fetchFixtureById } from "@/lib/api/api-football";
-import { sendTelegramMessage } from "@/lib/telegram/send";
+import { sendTelegramMessage, notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,10 +13,9 @@ export const maxDuration = 60;
  * matches finish. Without this cron, picks and value bets stay "pending"
  * forever and the leaderboard/ROI stats are meaningless.
  *
- * Scope per run (quota-aware):
+ * Scope per run:
  *  - Live matches (any league)
  *  - Scheduled matches whose kickoff was >105 min ago (should be over)
- * Capped at 10 API calls per run to stay within the 100 req/day budget.
  */
 
 function resolveOutcome(
@@ -59,7 +58,7 @@ export async function GET(req: NextRequest) {
         `and(status.eq.scheduled,kickoff.lte.${staleThreshold})`,
       ].join(","),
     )
-    .limit(10); // Stay within 100 req/day budget
+    .limit(50);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -242,7 +241,9 @@ export async function GET(req: NextRequest) {
       matchesUpdated++;
       settled += r.value.settled;
     } else {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
       console.error("[sync-results] fixture failed:", r.reason);
+      await notifyAdminError("sync-results", msg);
     }
   }
 
