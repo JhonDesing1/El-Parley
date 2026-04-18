@@ -1,12 +1,51 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, TrendingUp, Heart, Trophy, ClipboardList, ArrowRight, Code2, BarChart2, Send, Webhook, BookOpen, Target } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { Sparkles, TrendingUp, Heart, Trophy, ClipboardList, ArrowRight, Code2, BarChart2, Send, Webhook, BookOpen, Target, Crown, CheckCircle2, Zap, RefreshCw } from "lucide-react";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getUserTier } from "@/lib/utils/auth";
+import { upsertSubscription } from "@/lib/billing/upsert-subscription";
 
 export const metadata = { title: "Dashboard — El Parley" };
+
+/** Verifica el pago de MP en el momento del redirect (antes de que llegue el IPN). */
+async function tryActivateMPPayment(paymentId: string, userId: string): Promise<boolean> {
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+  if (!token) return false;
+  try {
+    const { MercadoPagoConfig, Payment } = await import("mercadopago");
+    const client = new MercadoPagoConfig({ accessToken: token });
+    const paymentClient = new Payment(client);
+    const payment = await paymentClient.get({ id: Number(paymentId) });
+
+    const metaUserId = payment.metadata?.user_id as string | undefined;
+    if (metaUserId !== userId) return false;
+    if (payment.status !== "approved") return false;
+
+    const plan = (payment.metadata?.plan ?? "monthly") as "monthly" | "yearly";
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setMonth(periodEnd.getMonth() + (plan === "yearly" ? 12 : 1));
+
+    const adminSupabase = createAdminClient();
+    await upsertSubscription({
+      supabase: adminSupabase,
+      userId,
+      provider: "mercadopago",
+      providerCustomerId: String(payment.payer?.id ?? payment.payer?.email ?? ""),
+      providerSubscriptionId: String(payment.id),
+      tier: "premium",
+      status: "active",
+      currentPeriodStart: now.toISOString(),
+      currentPeriodEnd: periodEnd.toISOString(),
+    });
+    await adminSupabase.from("profiles").update({ tier: "premium" }).eq("id", userId);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -17,12 +56,20 @@ export default async function DashboardPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?redirect=/dashboard");
+  if (!user) redirect("/login?next=/dashboard");
+
+  const params = await searchParams;
+
+  // Si viene del checkout de MP con payment_id, verificar y activar inmediatamente
+  // (el IPN puede llegar segundos después del redirect — esto evita el delay)
+  const incomingPaymentId = params.payment_id ?? params.collection_id;
+  if (params.welcome === "premium" && incomingPaymentId) {
+    await tryActivateMPPayment(incomingPaymentId, user.id);
+  }
 
   const tier = await getUserTier();
   const premium = tier === "premium" || tier === "pro";
   const pro = tier === "pro";
-  const params = await searchParams;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -71,9 +118,65 @@ export default async function DashboardPage({
 
   return (
     <div className="container max-w-6xl py-8">
-      {params.welcome === "premium" && (
-        <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-          Pago confirmado — bienvenido a Premium. Ya tienes acceso completo.
+      {params.welcome === "premium" && premium && (
+        <div className="mb-8 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/20">
+              <Crown className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold text-emerald-400">
+                ¡Bienvenido a Premium, {profile?.username ?? user.email?.split("@")[0]}!
+              </h2>
+              <p className="text-sm text-emerald-400/70">Tu suscripción ya está activa. Aquí tienes todo lo que puedes hacer:</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            <Link href="/value-bets" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 transition-colors hover:bg-emerald-500/15">
+              <Zap className="h-4 w-4 shrink-0 text-emerald-400" />
+              <div>
+                <div className="text-sm font-semibold text-emerald-300">Value Bets</div>
+                <div className="text-xs text-emerald-400/60">Ilimitadas, sin restricciones</div>
+              </div>
+            </Link>
+            <Link href="/parlays" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 transition-colors hover:bg-emerald-500/15">
+              <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
+              <div>
+                <div className="text-sm font-semibold text-emerald-300">Parlays IA</div>
+                <div className="text-xs text-emerald-400/60">Combinadas generadas por IA</div>
+              </div>
+            </Link>
+            <Link href="/telegram" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 transition-colors hover:bg-emerald-500/15">
+              <Send className="h-4 w-4 shrink-0 text-emerald-400" />
+              <div>
+                <div className="text-sm font-semibold text-emerald-300">Bot Telegram</div>
+                <div className="text-xs text-emerald-400/60">Alertas en tiempo real</div>
+              </div>
+            </Link>
+            <Link href="/bankroll" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 transition-colors hover:bg-emerald-500/15">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              <div>
+                <div className="text-sm font-semibold text-emerald-300">Kelly Calculator</div>
+                <div className="text-xs text-emerald-400/60">Gestión de bankroll óptima</div>
+              </div>
+            </Link>
+          </div>
+        </div>
+      )}
+      {params.welcome === "premium" && !premium && (
+        <div className="mb-8 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-6">
+          <div className="flex items-start gap-3">
+            <RefreshCw className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-yellow-400" />
+            <div>
+              <h2 className="font-semibold text-yellow-400">Activando tu suscripción Premium…</h2>
+              <p className="mt-1 text-sm text-yellow-400/70">
+                Tu pago fue recibido. El acceso Premium puede tardar hasta 1 minuto en activarse.{" "}
+                <Link href="/dashboard?welcome=premium" className="underline hover:text-yellow-300">
+                  Actualizar página
+                </Link>
+              </p>
+            </div>
+          </div>
         </div>
       )}
       {params.welcome === "pro" && (
@@ -81,7 +184,7 @@ export default async function DashboardPage({
           Pago confirmado — bienvenido a Pro. Tienes acceso a la API REST, backtesting y todas las funciones profesionales.
         </div>
       )}
-      {params.payment === "pending" && (
+      {params.pending === "true" && (
         <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-400">
           Tu pago está pendiente de confirmación (PSE / efectivo). Te notificaremos por email cuando se acredite. El acceso se activará automáticamente.
         </div>
@@ -261,6 +364,29 @@ export default async function DashboardPage({
           </Link>
         </div>
       </div>
+
+      {premium && !pro && (
+        <div className="mt-8">
+          <h2 className="mb-4 font-display text-lg font-bold">Herramientas Premium</h2>
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            <Link href="/value-bets" className="group rounded-xl border border-border/50 bg-muted/30 p-4 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5">
+              <Zap className="mb-2 h-5 w-5 text-emerald-400" />
+              <div className="text-sm font-semibold">Value Bets Ilimitadas</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Todas las oportunidades de valor, sin límite</div>
+            </Link>
+            <Link href="/parlays" className="group rounded-xl border border-border/50 bg-muted/30 p-4 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5">
+              <Sparkles className="mb-2 h-5 w-5 text-emerald-400" />
+              <div className="text-sm font-semibold">Parlays IA</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Combinadas curadas por inteligencia artificial</div>
+            </Link>
+            <Link href="/telegram" className="group rounded-xl border border-border/50 bg-muted/30 p-4 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5">
+              <Send className="mb-2 h-5 w-5 text-emerald-400" />
+              <div className="text-sm font-semibold">Bot Telegram</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Alertas de value bets en tiempo real</div>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {pro && (
         <div className="mt-8">

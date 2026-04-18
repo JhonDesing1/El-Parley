@@ -8,7 +8,7 @@ const stats = [
   {
     icon: TrendingUp,
     value: "+12.4%",
-    label: "ROI promedio",
+    label: "ROI promedio (retorno de inversión)",
     sub: "sobre bankroll inicial",
     color: "text-value",
   },
@@ -21,9 +21,9 @@ const stats = [
   },
   {
     icon: Zap,
-    value: "~24",
-    label: "Value bets/día",
-    sub: "en todas las ligas",
+    value: "~12",
+    label: "Value bets/día · Premium",
+    sub: "Free: 2 públicas al día",
     color: "text-primary",
   },
   {
@@ -53,7 +53,7 @@ export function Hero() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-value opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-value" />
               </span>
-              Edge matemático · Actualizado cada 15 min
+              Edge matemático (ventaja estadística) · Actualizado cada 15 min
             </div>
 
             {/* Headline */}
@@ -66,8 +66,10 @@ export function Hero() {
 
             {/* Subtitle */}
             <p className="max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-              Comparamos cuotas entre Betplay, Wplay, Codere y Rivalo. Detectamos
-              value bets con modelo Poisson+xG.
+              Analizamos cuotas en Betplay, Wplay, Codere y Rivalo para detectar{" "}
+              <span className="font-semibold text-foreground">value bets con modelo Poisson+xG</span>
+              {" "}— solo selecciones con cuota mínima de 0.60 y más del{" "}
+              <span className="font-semibold text-value">80% de probabilidad de acierto.</span>
             </p>
 
             {/* CTA buttons */}
@@ -81,7 +83,7 @@ export function Hero() {
             </div>
 
             {/* Trust badges */}
-            <div className="flex items-center gap-6 pt-4 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-6 pt-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-value" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -93,6 +95,13 @@ export function Hero() {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
                 Datos en tiempo real
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-primary">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+                Premium · Cuotas en vivo — Clásicos &amp; Copa Mundo
               </div>
             </div>
           </div>

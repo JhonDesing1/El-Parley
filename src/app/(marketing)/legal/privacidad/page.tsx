@@ -32,7 +32,8 @@ export default function PrivacidadPage() {
           </li>
           <li>
             <strong>Datos de pago:</strong> no almacenamos datos de tarjeta. El procesamiento lo
-            realizan Stripe y PayU, sujetos a sus propias políticas de privacidad y normas PCI-DSS.
+            realizan Stripe, PayU y Mercado Pago, sujetos a sus propias políticas de privacidad
+            y normas PCI-DSS.
           </li>
           <li>
             <strong>Datos de navegación:</strong> dirección IP (hasheada, nunca en texto plano),
@@ -100,6 +101,11 @@ export default function PrivacidadPage() {
           <li>
             <strong>PayU</strong> (pagos Colombia) — operación conforme a la Ley 1581 de 2012
             y acuerdos de procesamiento de datos.
+          </li>
+          <li>
+            <strong>Mercado Pago</strong> (pagos Colombia y LATAM) — operación conforme a la
+            Ley 1581 de 2012 (Colombia) y normativas locales de cada país donde opera; sujeto
+            a certificación PCI-DSS y sus propios acuerdos de procesamiento de datos.
           </li>
           <li>
             <strong>Vercel</strong> (infraestructura de hosting) — servidores globales; acogido

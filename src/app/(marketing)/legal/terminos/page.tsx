@@ -72,9 +72,11 @@ export default function TerminosPage() {
           beneficios específicos se detallan en la página de precios.
         </p>
         <p>
-          Los pagos son procesados por Stripe (tarjeta internacional) o PayU (Colombia — PSE,
-          efectivo, tarjeta local). Las suscripciones se renuevan automáticamente salvo que las
-          canceles antes del próximo ciclo de facturación.
+          Los pagos son procesados por <strong>Stripe</strong> (tarjeta internacional),{" "}
+          <strong>PayU</strong> (Colombia — PSE, efectivo, tarjeta local) o{" "}
+          <strong>Mercado Pago</strong> (Colombia y LATAM — tarjeta, PSE, efectivo y billetera
+          digital). Las suscripciones se renuevan automáticamente salvo que las canceles antes
+          del próximo ciclo de facturación.
         </p>
         <p>
           <strong>Política de cancelación y reembolso:</strong> Puedes cancelar tu suscripción

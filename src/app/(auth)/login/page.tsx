@@ -19,7 +19,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const redirect = params.get("redirect") ?? "/dashboard";
+  const redirect = params.get("next") ?? params.get("redirect") ?? "/dashboard";
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
