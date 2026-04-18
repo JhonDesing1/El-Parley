@@ -8,37 +8,21 @@ export interface BookmakerConfig {
 }
 
 export const BOOKMAKERS: Record<string, BookmakerConfig> = {
-  betplay: {
-    slug: "betplay",
-    name: "Betplay",
-    color: "#FFD200",
-    affiliateBase: "https://betplay.com.co/?aff=",
-    envTag: "NEXT_PUBLIC_BETPLAY_AFF",
-    country: "CO",
+  bet365: {
+    slug: "bet365",
+    name: "Bet365",
+    color: "#027B5B",
+    affiliateBase: "https://www.bet365.com/#/AC/B1/C1/D1002/E79147574/G40/",
+    envTag: "NEXT_PUBLIC_BET365_AFF",
+    country: "LATAM",
   },
-  wplay: {
-    slug: "wplay",
-    name: "Wplay",
-    color: "#E30613",
-    affiliateBase: "https://wplay.co/?ref=",
-    envTag: "NEXT_PUBLIC_WPLAY_AFF",
-    country: "CO",
-  },
-  codere: {
-    slug: "codere",
-    name: "Codere",
-    color: "#7AB800",
-    affiliateBase: "https://apuestas.codere.com.co/?tag=",
-    envTag: "NEXT_PUBLIC_CODERE_AFF",
-    country: "CO",
-  },
-  rivalo: {
-    slug: "rivalo",
-    name: "Rivalo",
-    color: "#FF6B00",
-    affiliateBase: "https://rivalo.com/co/?btag=",
-    envTag: "NEXT_PUBLIC_RIVALO_AFF",
-    country: "CO",
+  pinnacle: {
+    slug: "pinnacle",
+    name: "Pinnacle",
+    color: "#CC0000",
+    affiliateBase: "https://www.pinnacle.com/es/",
+    envTag: "NEXT_PUBLIC_PINNACLE_AFF",
+    country: "LATAM",
   },
   "1xbet": {
     slug: "1xbet",
@@ -46,6 +30,22 @@ export const BOOKMAKERS: Record<string, BookmakerConfig> = {
     color: "#1E5BAA",
     affiliateBase: "https://1xbet.com/es/?tag=",
     envTag: "NEXT_PUBLIC_1XBET_AFF",
+    country: "LATAM",
+  },
+  marathonbet: {
+    slug: "marathonbet",
+    name: "Marathonbet",
+    color: "#FF6600",
+    affiliateBase: "https://www.marathonbet.com/es/",
+    envTag: "NEXT_PUBLIC_MARATHONBET_AFF",
+    country: "LATAM",
+  },
+  betfair: {
+    slug: "betfair",
+    name: "Betfair",
+    color: "#FFCC00",
+    affiliateBase: "https://www.betfair.com/sport/",
+    envTag: "NEXT_PUBLIC_BETFAIR_AFF",
     country: "LATAM",
   },
 };

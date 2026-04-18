@@ -38,16 +38,15 @@ const OPTIONAL = [
   "NEWS_API_KEY",
   "TELEGRAM_BOT_TOKEN",
   "NEXT_PUBLIC_TELEGRAM_BOT_USERNAME",
+  "TELEGRAM_ADMIN_CHAT_ID",
   "NEXT_PUBLIC_ONESIGNAL_APP_ID",
   "ONESIGNAL_REST_API_KEY",
   "NEXT_PUBLIC_POSTHOG_KEY",
-  "NEXT_PUBLIC_BETPLAY_AFF",
-  "NEXT_PUBLIC_WPLAY_AFF",
-  "NEXT_PUBLIC_CODERE_AFF",
-  "NEXT_PUBLIC_RIVALO_AFF",
+  "NEXT_PUBLIC_BET365_AFF",
+  "NEXT_PUBLIC_PINNACLE_AFF",
   "NEXT_PUBLIC_1XBET_AFF",
-  "PAYU_RESPONSE_URL",
-  "PAYU_NOTIFICATION_URL",
+  "NEXT_PUBLIC_MARATHONBET_AFF",
+  "NEXT_PUBLIC_BETFAIR_AFF",
 ];
 
 const missing = [];
@@ -70,7 +69,7 @@ if (isProd) {
   );
   if (!hasPaymentProvider) {
     missing.push(
-      "(ningún proveedor de pago completo: Stripe, PayU o MercadoPago)"
+      "(MERCADOPAGO_ACCESS_TOKEN no configurado)"
     );
   }
 

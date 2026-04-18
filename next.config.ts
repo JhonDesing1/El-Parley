@@ -19,8 +19,8 @@ const nextConfig: NextConfig = {
     // middleware integration; see Next.js docs on CSP + nonces for a future upgrade.
     const csp = [
       "default-src 'self'",
-      // Next.js inline scripts + Stripe + OneSignal
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://cdn.onesignal.com https://onesignal.com",
+      // Next.js inline scripts + OneSignal
+      "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com",
       // Tailwind injects inline styles at runtime
       "style-src 'self' 'unsafe-inline'",
       // Image CDNs already listed in remotePatterns + data URIs for placeholders
@@ -28,15 +28,13 @@ const nextConfig: NextConfig = {
       // Web fonts
       "font-src 'self' data:",
       // XHR / fetch / WebSocket destinations
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://app.posthog.com https://us.i.posthog.com https://eu.i.posthog.com https://onesignal.com https://api.onesignal.com",
-      // Stripe checkout iframe
-      "frame-src https://js.stripe.com https://hooks.stripe.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://app.posthog.com https://us.i.posthog.com https://eu.i.posthog.com https://onesignal.com https://api.onesignal.com",
       // No Flash / Java plugins
       "object-src 'none'",
       // Prevent <base> tag hijacking
       "base-uri 'self'",
-      // Restrict where forms can POST (PayU checkout + self)
-      "form-action 'self' https://checkout.payulatam.com https://sandbox.checkout.payulatam.com",
+      // Restrict where forms can POST
+      "form-action 'self'",
       // Block all framing of our pages (redundant with X-Frame-Options but belt+suspenders)
       "frame-ancestors 'none'",
     ].join("; ");

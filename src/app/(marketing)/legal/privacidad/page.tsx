@@ -32,8 +32,7 @@ export default function PrivacidadPage() {
           </li>
           <li>
             <strong>Datos de pago:</strong> no almacenamos datos de tarjeta. El procesamiento lo
-            realizan Stripe, PayU y Mercado Pago, sujetos a sus propias políticas de privacidad
-            y normas PCI-DSS.
+            realiza Mercado Pago, sujeto a sus propias políticas de privacidad y normas PCI-DSS.
           </li>
           <li>
             <strong>Datos de navegación:</strong> dirección IP (hasheada, nunca en texto plano),
@@ -93,14 +92,6 @@ export default function PrivacidadPage() {
           <li>
             <strong>Supabase</strong> (base de datos y autenticación) — servidores en US East;
             acogido a las cláusulas contractuales tipo de la UE (SCCs).
-          </li>
-          <li>
-            <strong>Stripe</strong> (pagos internacionales) — acogido a las SCCs y certificado
-            bajo los marcos de privacidad UE-EE.UU.
-          </li>
-          <li>
-            <strong>PayU</strong> (pagos Colombia) — operación conforme a la Ley 1581 de 2012
-            y acuerdos de procesamiento de datos.
           </li>
           <li>
             <strong>Mercado Pago</strong> (pagos Colombia y LATAM) — operación conforme a la
