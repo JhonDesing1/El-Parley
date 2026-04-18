@@ -48,6 +48,14 @@ export async function POST(req: NextRequest) {
       const periodEnd = new Date(now);
       periodEnd.setMonth(periodEnd.getMonth() + (plan === "yearly" ? 12 : 1));
 
+      // Cancelar suscripción activa anterior del mismo usuario (upgrade/recompra)
+      await supabase
+        .from("subscriptions")
+        .update({ status: "canceled", canceled_at: now.toISOString() })
+        .eq("user_id", userId)
+        .in("status", ["active", "trialing"])
+        .neq("provider_subscription_id", String(payment.id));
+
       await upsertSubscription({
         supabase,
         userId,
