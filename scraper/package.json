@@ -7,13 +7,11 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index-once.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/index-once.mjs",
-    "install:browsers": "npx playwright install chromium --with-deps"
+    "build": "esbuild src/index-once.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/index-once.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "node-cron": "^3.0.3",
-    "playwright": "^1.44.0"
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

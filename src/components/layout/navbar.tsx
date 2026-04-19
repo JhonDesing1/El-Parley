@@ -7,7 +7,7 @@ import {
   TrendingUp,
   Newspaper,
   ClipboardList,
-  BookOpen,
+  Layers,
   Menu,
   Crown,
   Zap,
@@ -23,10 +23,10 @@ import {
 
 const navLinks = [
   { href: "/", label: "Hoy", icon: Zap },
-  { href: "/parlays", label: "Parlays", icon: TrendingUp },
+  { href: "/value-bets", label: "Cuotas", icon: TrendingUp },
+  { href: "/parlays", label: "Combinadas", icon: Layers },
   { href: "/blog", label: "Análisis", icon: Newspaper },
   { href: "/mis-picks", label: "Mis Picks", icon: ClipboardList },
-  { href: "/bankroll", label: "Bankroll", icon: BookOpen },
 ]
 
 export function Navbar() {

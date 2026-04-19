@@ -32,10 +32,9 @@ export async function updateSession(request: NextRequest) {
   // Rutas protegidas — todas las páginas bajo el route group (app).
   // Actualizar esta lista cuando se agregue una nueva página en src/app/(app)/.
   // Rutas que requieren sesión activa.
-  // /partido, /premium y /value-bets son públicas (tienen tiering propio).
+  // /partido, /premium, /value-bets y /parlays son públicas (tienen tiering propio).
   const protectedPaths = [
     "/dashboard",
-    "/parlays",
     "/mis-picks",
     "/api-key",
     "/webhooks",

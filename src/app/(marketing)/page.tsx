@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
-import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Zap } from "lucide-react";
+import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Zap, Globe } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 export const revalidate = 900;
@@ -25,7 +26,9 @@ export default async function HomePage() {
   `;
 
   // Próximos partidos + bets gratuitas (media/baja confianza) + teasers premium (alta confianza)
-  const [{ data: matchesRaw }, { data: freeBetsRaw }, { data: premiumBetsRaw }] = await Promise.all([
+  const TOP_LEAGUE_COUNTRIES = ["Spain", "England", "Germany"];
+
+  const [{ data: matchesRaw }, { data: freeBetsRaw }, { data: premiumBetsRaw }, { data: topLeagueBetsRaw }] = await Promise.all([
     supabase
       .from("matches")
       .select(
@@ -58,6 +61,15 @@ export default async function HomePage() {
       .eq("confidence", "high")
       .order("edge", { ascending: false })
       .limit(3),
+
+    // Cuotas grandes ligas (La Liga, Premier League, Bundesliga) — ordenadas por model_prob desc
+    supabase
+      .from("value_bets")
+      .select(betSelect)
+      .eq("result", "pending")
+      .eq("is_premium", false)
+      .order("model_prob", { ascending: false })
+      .limit(50),
   ]);
 
   const allBets = [...(freeBetsRaw ?? []), ...(premiumBetsRaw ?? [])];
@@ -79,6 +91,26 @@ export default async function HomePage() {
   const freeValueBets = freeBetsRaw ?? [];
   const premiumTeasers = premiumBetsRaw ?? [];
   const hasAnyBets = freeValueBets.length > 0 || premiumTeasers.length > 0;
+
+  const TOP_LEAGUES_CONFIG = [
+    { country: "Spain", name: "La Liga", flag: "🇪🇸" },
+    { country: "England", name: "Premier League", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+    { country: "Germany", name: "Bundesliga", flag: "🇩🇪" },
+  ];
+
+  const topLeagueBetsAll = (topLeagueBetsRaw ?? []).filter((vb: any) =>
+    TOP_LEAGUE_COUNTRIES.includes(vb.match?.league?.country),
+  );
+
+  const betsByLeague = TOP_LEAGUES_CONFIG.map((league) => ({
+    ...league,
+    bets: topLeagueBetsAll
+      .filter((vb: any) => vb.match?.league?.country === league.country)
+      .slice(0, 4),
+    leagueMeta: topLeagueBetsAll.find(
+      (vb: any) => vb.match?.league?.country === league.country,
+    )?.match?.league ?? null,
+  }));
 
   return (
     <>
@@ -218,6 +250,64 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* ── GRANDES LIGAS ── */}
+      <section className="container py-12">
+        <header className="mb-8">
+          <Badge variant="outline" className="mb-2 border-border bg-muted/60 text-muted-foreground">
+            <Globe className="mr-1 h-3 w-3" />
+            GRANDES LIGAS
+          </Badge>
+          <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
+            Cuotas con mayor probabilidad de acierto
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Los picks mejor valorados por nuestro modelo en La Liga, Premier League y Bundesliga.
+          </p>
+        </header>
+
+        <div className="grid gap-8 md:grid-cols-3">
+          {betsByLeague.map(({ country, name, flag, bets, leagueMeta }) => (
+            <div key={country} className="flex flex-col gap-3">
+              {/* League header */}
+              <div className="flex items-center gap-2 border-b border-border/40 pb-3">
+                {leagueMeta?.logo_url ? (
+                  <Image
+                    src={leagueMeta.logo_url}
+                    alt={name}
+                    width={20}
+                    height={20}
+                    sizes="20px"
+                    className="object-contain"
+                  />
+                ) : (
+                  <span className="text-base">{flag}</span>
+                )}
+                <span className="font-display font-bold">{name}</span>
+                {bets.length > 0 && (
+                  <Badge variant="outline" className="ml-auto text-[10px]">
+                    {bets.length} pick{bets.length > 1 ? "s" : ""}
+                  </Badge>
+                )}
+              </div>
+
+              {bets.length > 0 ? (
+                bets.map((vb: any) => (
+                  <LeaguePickRow key={vb.id} vb={vb} />
+                ))
+              ) : (
+                <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+                  <Trophy className="h-8 w-8 text-muted-foreground/40" />
+                  <p className="text-sm font-medium text-muted-foreground">Sin picks detectados</p>
+                  <p className="text-xs text-muted-foreground">
+                    Vuelve más tarde — el modelo actualiza cada 10 min.
+                  </p>
+                </Card>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="container py-12">
         <header className="mb-6 flex items-end justify-between">
           <div>
@@ -275,6 +365,64 @@ export default async function HomePage() {
         </div>
       </section>
     </>
+  );
+}
+
+function LeaguePickRow({ vb }: { vb: any }) {
+  const modelPct = Math.round(vb.model_prob * 100);
+  const edgePct = (vb.edge * 100).toFixed(1);
+
+  const confidence = vb.confidence as "low" | "medium" | "high";
+  const probColor =
+    confidence === "high"
+      ? "bg-emerald-500/15 text-emerald-400 ring-emerald-500/25"
+      : confidence === "medium"
+        ? "bg-green-500/10 text-green-400 ring-green-500/20"
+        : "bg-amber-500/10 text-amber-400 ring-amber-500/20";
+
+  const kickoff = new Date(vb.match.kickoff).toLocaleString("es-CO", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Bogota",
+  });
+
+  return (
+    <a
+      href={`/api/track/affiliate?book=${vb.bookmaker?.slug ?? ""}&match=${vb.match_id}&source=leagues_section`}
+      target="_blank"
+      rel="noopener nofollow sponsored"
+      className="group flex items-center gap-3 rounded-xl border border-border/60 bg-card p-3.5 transition-all hover:border-primary/30 hover:shadow-[0_0_20px_-8px_hsl(var(--primary)/0.4)]"
+    >
+      {/* Win probability circle */}
+      <div
+        className={`flex h-14 w-14 flex-shrink-0 flex-col items-center justify-center rounded-lg ring-1 ${probColor}`}
+      >
+        <span className="font-mono text-lg font-bold leading-none">{modelPct}%</span>
+        <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider opacity-70">prob</span>
+      </div>
+
+      {/* Details */}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">
+          {vb.match.home_team.name}{" "}
+          <span className="font-normal text-muted-foreground">vs</span>{" "}
+          {vb.match.away_team.name}
+        </p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {vb.selection}
+        </p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="inline-flex items-center rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums">
+            {vb.price.toFixed(2)}
+          </span>
+          <span className="text-[11px] font-bold text-emerald-400">+{edgePct}%</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">{kickoff}</span>
+        </div>
+      </div>
+    </a>
   );
 }
 
