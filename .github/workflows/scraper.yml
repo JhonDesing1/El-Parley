@@ -23,11 +23,15 @@ jobs:
 
       - name: Instalar dependencias
         working-directory: scraper
-        run: npm ci
+        run: npm install
+
+      - name: Compilar
+        working-directory: scraper
+        run: npm run build
 
       - name: Correr scraper
         working-directory: scraper
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: node --import tsx/esm src/index-once.ts
+        run: node dist/index-once.mjs
