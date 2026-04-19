@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
-import { detectValueBet } from "@/lib/betting/value-bet";
+import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
         result: "pending" as const,
         // Las de edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,
-        reasoning: `Modelo estima ${(modelProb * 100).toFixed(0)}% vs ${(result.impliedProb * 100).toFixed(0)}% implícita. Edge +${(result.edge * 100).toFixed(1)}%.`,
+        reasoning: buildReasoning(o.market, o.selection, modelProb, result.impliedProb, result.edge, match.model_expected_goals_home!, match.model_expected_goals_away!),
       });
     }
 

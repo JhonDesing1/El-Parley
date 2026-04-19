@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { fetchOddsForFixtures } from "@/lib/api/api-football";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
-import { detectValueBet } from "@/lib/betting/value-bet";
+import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
 import { notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
               confidence: result.confidence,
               result: "pending" as const,
               is_premium: result.edge < 0.06,
-              reasoning: `Modelo estima ${(modelProb * 100).toFixed(0)}% vs ${(result.impliedProb * 100).toFixed(0)}% implícita. Edge +${(result.edge * 100).toFixed(1)}%.`,
+              reasoning: buildReasoning(o.market, o.selection, modelProb, result.impliedProb, result.edge, m.model_expected_goals_home!, m.model_expected_goals_away!),
             });
           }
 
