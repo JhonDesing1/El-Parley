@@ -104,12 +104,11 @@ export async function POST(req: NextRequest) {
     .from("bookmakers")
     .select("id")
     .eq("slug", body.source)
-    .eq("is_active", true)
     .single();
 
   if (bmErr || !bm) {
     return NextResponse.json(
-      { error: `Bookmaker no encontrado o inactivo: ${body.source}` },
+      { error: `Bookmaker no encontrado: ${body.source}`, detail: bmErr?.message },
       { status: 400 },
     );
   }
