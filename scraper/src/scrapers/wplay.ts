@@ -111,33 +111,43 @@ function parseKambiEvents(data: KambiResponse, seenEventIds: Set<number>): Scrap
   return odds;
 }
 
+const FETCH_HEADERS = {
+  "Accept": "application/json, text/plain, */*",
+  "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Referer": "https://www.wplay.co/",
+  "Origin": "https://www.wplay.co",
+};
+
 export async function scrapeWplay(): Promise<ScrapedOdd[]> {
   console.log("[wplay] Consultando API Kambi...");
 
   const seenEventIds = new Set<number>();
   const allOdds: ScrapedOdd[] = [];
 
-  const results = await Promise.allSettled(
-    FOOTBALL_URLS.map((url) =>
-      fetch(url, {
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0 (compatible; ElParley-Scraper/1.0)",
-        },
-      })
-        .then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
-          return r.json() as Promise<KambiResponse>;
-        })
-        .then((data) => parseKambiEvents(data, seenEventIds)),
-    ),
-  );
-
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      allOdds.push(...r.value);
-    } else {
-      console.warn("[wplay] URL falló:", r.reason);
+  // Sequential fetching with delay to avoid rate limiting on the wplay operator key
+  for (const url of FOOTBALL_URLS) {
+    try {
+      const r = await fetch(url, { headers: FETCH_HEADERS });
+      if (!r.ok) {
+        if (r.status === 429) {
+          // Brief pause then retry once
+          await new Promise((res) => setTimeout(res, 3000));
+          const r2 = await fetch(url, { headers: FETCH_HEADERS });
+          if (!r2.ok) { console.warn(`[wplay] URL sigue fallando (${r2.status}): ${url}`); continue; }
+          const data = await r2.json() as KambiResponse;
+          allOdds.push(...parseKambiEvents(data, seenEventIds));
+        } else {
+          console.warn(`[wplay] URL falló (${r.status}): ${url}`);
+        }
+        continue;
+      }
+      const data = await r.json() as KambiResponse;
+      allOdds.push(...parseKambiEvents(data, seenEventIds));
+      // Small delay between requests
+      await new Promise((res) => setTimeout(res, 800));
+    } catch (err) {
+      console.warn("[wplay] URL falló:", err);
     }
   }
 
