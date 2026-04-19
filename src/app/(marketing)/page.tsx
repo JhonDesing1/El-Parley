@@ -263,7 +263,7 @@ export default async function HomePage() {
           <FeatureCard
             icon={<TrendingUp className="h-6 w-6" />}
             title="Comparador multi-casa"
-            desc="Las mejores cuotas de Betplay, Wplay, Codere, Rivalo y más en una sola vista."
+            desc="Las mejores cuotas de las principales casas de apuestas nacionales e internacionales, en una sola vista."
             color="emerald"
           />
           <FeatureCard

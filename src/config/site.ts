@@ -3,7 +3,7 @@ export const siteConfig = {
   shortName: "EP",
   tagline: "Value betting con matemáticas, no con corazonadas.",
   description:
-    "Plataforma de análisis de cuotas, value bets y parlays para Colombia y LATAM. Compara Betplay, Wplay, Codere y más.",
+    "Plataforma de análisis de cuotas, value bets y parlays para Colombia y LATAM. Compara cuotas de las principales casas de apuestas nacionales e internacionales.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://elparley.com",
   ogImage: "/og-default.png",
   links: {

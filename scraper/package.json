@@ -1,0 +1,25 @@
+{
+  "name": "elparley-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scraper de cuotas para Betplay y Wplay — servicio standalone para Railway/Render",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "install:browsers": "npx playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.44.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

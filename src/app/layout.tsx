@@ -34,8 +34,7 @@ export const metadata: Metadata = {
   keywords: [
     "value bets",
     "apuestas deportivas",
-    "Betplay",
-    "Wplay",
+    "casas de apuestas Colombia",
     "comparador de cuotas",
     "parlays",
     "Liga BetPlay",

@@ -30,7 +30,7 @@ const stats = [
     icon: BarChart3,
     value: "4",
     label: "Casas comparadas",
-    sub: "Betplay, Wplay, Codere…",
+    sub: "Nacionales e internacionales",
     color: "text-primary",
   },
 ]
@@ -66,7 +66,7 @@ export function Hero() {
 
             {/* Subtitle */}
             <p className="max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-              Analizamos cuotas en Betplay, Wplay, Codere y Rivalo para detectar{" "}
+              Analizamos cuotas de las principales casas de apuestas nacionales e internacionales para detectar{" "}
               <span className="font-semibold text-foreground">value bets con modelo Poisson+xG</span>
               {" "}— solo selecciones con cuota mínima de 0.60 y más del{" "}
               <span className="font-semibold text-value">80% de probabilidad de acierto.</span>

@@ -48,6 +48,55 @@ export const BOOKMAKERS: Record<string, BookmakerConfig> = {
     envTag: "NEXT_PUBLIC_BETFAIR_AFF",
     country: "LATAM",
   },
+  // ── Casas colombianas (Coljuegos) ────────────────────────────────────────
+  betplay: {
+    slug: "betplay",
+    name: "Betplay",
+    color: "#E4002B",
+    affiliateBase: "https://www.betplay.com.co/apuestas/",
+    envTag: "NEXT_PUBLIC_BETPLAY_AFF",
+    country: "CO",
+  },
+  wplay: {
+    slug: "wplay",
+    name: "Wplay",
+    color: "#003087",
+    affiliateBase: "https://www.wplay.co/apuestas/",
+    envTag: "NEXT_PUBLIC_WPLAY_AFF",
+    country: "CO",
+  },
+  betcris: {
+    slug: "betcris",
+    name: "Betcris",
+    color: "#E30613",
+    affiliateBase: "https://www.betcris.com/es/colombia/",
+    envTag: "NEXT_PUBLIC_BETCRIS_AFF",
+    country: "CO",
+  },
+  betano: {
+    slug: "betano",
+    name: "Betano",
+    color: "#FFD700",
+    affiliateBase: "https://www.betano.com.co/sport/",
+    envTag: "NEXT_PUBLIC_BETANO_AFF",
+    country: "CO",
+  },
+  codere: {
+    slug: "codere",
+    name: "Codere",
+    color: "#00A651",
+    affiliateBase: "https://www.codere.com.co/apuestas-deportivas/",
+    envTag: "NEXT_PUBLIC_CODERE_AFF",
+    country: "CO",
+  },
+  rushbet: {
+    slug: "rushbet",
+    name: "Rushbet",
+    color: "#FF6B00",
+    affiliateBase: "https://rushbet.co/apuestas/",
+    envTag: "NEXT_PUBLIC_RUSHBET_AFF",
+    country: "CO",
+  },
 };
 
 export function buildAffiliateUrl(slug: string): string {
