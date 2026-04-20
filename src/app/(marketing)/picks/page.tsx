@@ -60,9 +60,9 @@ export default async function PicksPage() {
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   ).toISOString();
 
-  // Start of yesterday UTC (for recently resolved suggested bets)
-  const yesterdayUTC = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1),
+  // Start of tomorrow UTC (to bound today's kickoffs)
+  const tomorrowUTC = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
   ).toISOString();
 
   const [
@@ -77,7 +77,7 @@ export default async function PicksPage() {
       .order("created_at", { ascending: false })
       .limit(50),
 
-    // Apuestas sugeridas: pending (any age) + resolved since yesterday
+    // Apuestas sugeridas: solo pending con partido hoy (model_prob >= 80% via is_suggested)
     supabase
       .from("value_bets")
       .select(`
@@ -90,9 +90,9 @@ export default async function PicksPage() {
         )
       `)
       .eq("is_suggested", true)
-      .or(`result.eq.pending,detected_at.gte.${yesterdayUTC}`)
-      .order("detected_at", { ascending: false })
-      .limit(20),
+      .eq("result", "pending")
+      .order("model_prob", { ascending: false })
+      .limit(50),
 
     // Today's free parlays with legs
     supabase
@@ -115,7 +115,7 @@ export default async function PicksPage() {
       .limit(4),
   ]);
 
-  const picks = (tipsterPicks ?? []) as any[];
+  const allPicks = (tipsterPicks ?? []) as any[];
   const suggested = (suggestedBets ?? []) as any[];
   const parlays = (todayParlays ?? []) as any[];
 
@@ -126,16 +126,32 @@ export default async function PicksPage() {
     }
   }
 
-  // Tipster stats
-  const resolved = picks.filter((p) => p.result !== "pending" && p.result !== "void");
+  // Tipster stats (usa todos los picks para el historial)
+  const resolved = allPicks.filter((p) => p.result !== "pending" && p.result !== "void");
   const won = resolved.filter((p) => p.result === "won").length;
   const winRate = resolved.length > 0 ? Math.round((won / resolved.length) * 100) : null;
-  const totalUnits = picks.reduce((s: number, p: any) => s + (Number(p.profit_units) || 0), 0);
-  const pendingPicks = picks.filter((p) => p.result === "pending");
-  const historicalPicks = picks.filter((p) => p.result !== "pending");
+  const totalUnits = allPicks.reduce((s: number, p: any) => s + (Number(p.profit_units) || 0), 0);
 
-  const pendingSuggested = suggested.filter((b) => b.result === "pending");
-  const resolvedSuggested = suggested.filter((b) => b.result !== "pending");
+  // Solo picks activos con partido HOY, máximo 3
+  const pendingPicks = allPicks
+    .filter((p) => {
+      if (p.result !== "pending") return false;
+      const kickoff = p.kickoff;
+      if (!kickoff) return false;
+      return kickoff >= todayUTC && kickoff < tomorrowUTC;
+    })
+    .slice(0, 3);
+
+  const historicalPicks = allPicks.filter((p) => p.result !== "pending");
+
+  // Apuestas sugeridas con partido HOY, prob >= 80% (ya filtrado por is_suggested), máximo 3
+  const pendingSuggested = suggested
+    .filter((b) => {
+      const kickoff = b.match?.kickoff;
+      if (!kickoff) return false;
+      return kickoff >= todayUTC && kickoff < tomorrowUTC;
+    })
+    .slice(0, 3);
 
   return (
     <div className="container max-w-3xl py-10">
@@ -197,36 +213,21 @@ export default async function PicksPage() {
       )}
 
       {/* ── Apuestas Sugeridas ──────────────────────────────────────── */}
-      {(pendingSuggested.length > 0 || resolvedSuggested.length > 0) && (
+      {pendingSuggested.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             <Zap className="h-4 w-4" />
             Apuestas Sugeridas
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Selecciones con probabilidad del modelo ≥ 80% y cuota mínima 1.55
+            Partidos de hoy · probabilidad ≥ 80% · cuota mínima 1.55
           </p>
 
-          {pendingSuggested.length > 0 && (
-            <div className="mb-4 space-y-2">
-              {pendingSuggested.map((bet) => (
-                <SuggestedBetCard key={bet.id} bet={bet} />
-              ))}
-            </div>
-          )}
-
-          {resolvedSuggested.length > 0 && (
-            <>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Recientes resueltas
-              </p>
-              <div className="space-y-2">
-                {resolvedSuggested.map((bet) => (
-                  <SuggestedBetCard key={bet.id} bet={bet} compact />
-                ))}
-              </div>
-            </>
-          )}
+          <div className="space-y-2">
+            {pendingSuggested.map((bet) => (
+              <SuggestedBetCard key={bet.id} bet={bet} />
+            ))}
+          </div>
         </section>
       )}
 
@@ -258,7 +259,7 @@ export default async function PicksPage() {
         </section>
       )}
 
-      {picks.length === 0 && suggested.length === 0 && parlays.length === 0 && (
+      {pendingPicks.length === 0 && pendingSuggested.length === 0 && parlays.length === 0 && (
         <Card className="p-12 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Target className="h-6 w-6" />
