@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet } from "@/lib/betting/parlay-calculator";
+import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet, generatePremium90Parlays } from "@/lib/betting/parlay-calculator";
 import type { Database } from "@/types/database";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -371,6 +371,30 @@ export async function GET(req: NextRequest) {
       generatedIds.push(id);
       combinada80Legs.forEach((l) => usedMatchIds.add(l.matchId));
     }
+  }
+
+  // ── Combinadas 90% Premium: 4 combinadas con prob ≥ 90% y cuota ≥ 1.60 ─────
+  const premium90Combos = generatePremium90Parlays(allCandidates, 4);
+
+  for (let idx = 0; idx < premium90Combos.length; idx++) {
+    const legs90 = premium90Combos[idx];
+    const with90Meta = legs90.map(
+      (l) => allCandidates.find(
+        (c) => c.matchId === l.matchId && c.market === l.market && c.selection === l.selection,
+      )!,
+    );
+
+    const combinedProb90 = legs90.reduce((p, l) => p * (l.modelProb ?? 0), 1);
+    const totalOdds90 = legs90.reduce((p, l) => p * l.decimalOdds, 1);
+
+    const id = await insertParlay(
+      with90Meta,
+      `Combinada 90% #${idx + 1} · x${totalOdds90.toFixed(2)}`,
+      `${legs90.length} selecciones con ${(combinedProb90 * 100).toFixed(0)}% de probabilidad combinada y cuota x${totalOdds90.toFixed(2)}.`,
+      "premium",
+    );
+
+    if (id) generatedIds.push(id);
   }
 
   // ── FunBet del día: cuota acumulada objetivo ≈ 30, entretenimiento ────────

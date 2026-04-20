@@ -179,6 +179,96 @@ export function generateFunBet(
 }
 
 /**
+ * Genera hasta `count` combinadas con probabilidad combinada ≥ 90%
+ * y cuota total ≥ 1.60 (ganancia neta ≥ 0.60 por unidad apostada).
+ *
+ * Pensadas para usuarios premium: riesgo muy bajo, cuota atractiva.
+ *
+ * Algoritmo:
+ * 1. Filtra candidatos con prob individual ≥ 0.88 y cuota ≥ 1.10
+ * 2. Genera todas las combinaciones de 2 piernas; si faltan, añade de 3
+ * 3. Filtra combinaciones donde prob_combinada ≥ 0.90 y cuota_total ≥ 1.60
+ * 4. Ordena por EV (prob × cuota − 1) y devuelve las `count` mejores
+ *    garantizando diversidad de partidos primarios
+ */
+export function generatePremium90Parlays(
+  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  count = 4,
+): ParlayLeg[][] {
+  const MIN_COMBINED_PROB = 0.90;
+  const MIN_TOTAL_ODDS = 1.60;
+  const MIN_INDIVIDUAL_PROB = 0.88;
+
+  const filtered = candidates
+    .filter((c) => (c.modelProb ?? 0) >= MIN_INDIVIDUAL_PROB && c.decimalOdds >= 1.10)
+    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+
+  if (filtered.length < 2) return [];
+
+  // Cap para evitar explosión combinatoria
+  const pool = filtered.slice(0, 25);
+
+  type Combo = { legs: typeof pool; prob: number; odds: number };
+  const validCombos: Combo[] = [];
+
+  // ── Combinaciones de 2 piernas ──
+  for (let i = 0; i < pool.length - 1; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      if (pool[i].matchId === pool[j].matchId) continue;
+      const prob = (pool[i].modelProb ?? 0) * (pool[j].modelProb ?? 0);
+      const odds = pool[i].decimalOdds * pool[j].decimalOdds;
+      if (prob >= MIN_COMBINED_PROB && odds >= MIN_TOTAL_ODDS) {
+        validCombos.push({ legs: [pool[i], pool[j]], prob, odds });
+      }
+    }
+  }
+
+  // ── Combinaciones de 3 piernas si todavía faltan ──
+  if (validCombos.length < count) {
+    for (let i = 0; i < pool.length - 2; i++) {
+      for (let j = i + 1; j < pool.length - 1; j++) {
+        for (let k = j + 1; k < pool.length; k++) {
+          const legs = [pool[i], pool[j], pool[k]];
+          const matchIds = new Set(legs.map((l) => l.matchId));
+          if (matchIds.size < legs.length) continue; // mismo partido en dos piernas
+          const prob = legs.reduce((p, l) => p * (l.modelProb ?? 0), 1);
+          const odds = legs.reduce((p, l) => p * l.decimalOdds, 1);
+          if (prob >= MIN_COMBINED_PROB && odds >= MIN_TOTAL_ODDS) {
+            validCombos.push({ legs, prob, odds });
+          }
+        }
+      }
+    }
+  }
+
+  if (validCombos.length === 0) return [];
+
+  // Ordenar por EV = prob × cuota − 1
+  validCombos.sort((a, b) => b.prob * b.odds - a.prob * a.odds);
+
+  // Seleccionar top `count` con diversidad de partido primario
+  const selected: Combo[] = [];
+  const usedPrimaryMatches = new Set<number>();
+
+  for (const combo of validCombos) {
+    if (selected.length >= count) break;
+    const primary = combo.legs[0].matchId;
+    if (!usedPrimaryMatches.has(primary)) {
+      selected.push(combo);
+      usedPrimaryMatches.add(primary);
+    }
+  }
+
+  // Si aún faltan, completar permitiendo solapamiento de partido
+  for (const combo of validCombos) {
+    if (selected.length >= count) break;
+    if (!selected.includes(combo)) selected.push(combo);
+  }
+
+  return selected.map((s) => s.legs);
+}
+
+/**
  * Genera el "parlay del día": combinación de N selecciones con
  * probabilidad combinada del modelo > umbral.
  *

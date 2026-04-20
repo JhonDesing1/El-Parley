@@ -3,8 +3,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParlayCard } from "@/components/parlay/parlay-card";
 import { FunBetCard } from "@/components/parlay/funbet-card";
 import { Combinada80Card } from "@/components/parlay/combinada80-card";
+import { Combinada90Card } from "@/components/parlay/combinada90-card";
 import { isPremiumUser } from "@/lib/utils/auth";
-import { Layers, RefreshCw } from "lucide-react";
+import { Layers, Lock, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -42,10 +44,14 @@ export default async function ParlaysPage() {
   // Separar por tipo usando la convención de título
   const isFunBet = (p: any) => (p.title as string)?.startsWith("FunBet");
   const isCombi80 = (p: any) => (p.title as string)?.startsWith("Combinada 80%");
+  const isCombi90 = (p: any) => (p.title as string)?.startsWith("Combinada 90%");
 
   const funBets = (parlays ?? []).filter(isFunBet);
   const combinadas80 = (parlays ?? []).filter(isCombi80);
-  const regularParlays = (parlays ?? []).filter((p) => !isFunBet(p) && !isCombi80(p));
+  const combinadas90 = (parlays ?? []).filter(isCombi90);
+  const regularParlays = (parlays ?? []).filter(
+    (p) => !isFunBet(p) && !isCombi80(p) && !isCombi90(p),
+  );
   const premium = regularParlays.filter((p: any) => p.tier !== "free");
   const free = regularParlays.filter((p: any) => p.tier === "free");
 
@@ -114,6 +120,31 @@ export default async function ParlaysPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 {combinadas80.map((p: any) => (
                   <Combinada80Card key={p.id} parlay={p} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── Combinadas 90% Premium ───────────────────────────── */}
+          {combinadas90.length > 0 && (
+            <section>
+              <div className="mb-4 flex items-center gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+                    Combinadas 90%
+                    <Badge variant="premium" className="gap-1">
+                      <Lock className="h-3 w-3" />
+                      PREMIUM
+                    </Badge>
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    4 combinadas diarias con probabilidad ≥ 90% y ganancia neta ≥ 0.60 por unidad.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {combinadas90.map((p: any) => (
+                  <Combinada90Card key={p.id} parlay={p} isLocked={!isPremium} />
                 ))}
               </div>
             </section>

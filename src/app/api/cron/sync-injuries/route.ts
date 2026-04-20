@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchInjuriesForFixture } from "@/lib/api/api-football";
+import { fetchInjuriesForFixture, fetchLineupsForFixture } from "@/lib/api/api-football";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   // (status = 'live', kickoff already elapsed) are also included.
   const { data: matches, error } = await supabase
     .from("matches")
-    .select("id")
+    .select("id, kickoff, home_team_id, away_team_id")
     .lte("kickoff", in72h)
     .gte("kickoff", ago2h)
     .in("status", ["scheduled", "live"]);
@@ -69,6 +69,36 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Sync lineups — only available ~1h before kickoff, silent fail if not yet
+      const kickoffMs = new Date((match as any).kickoff).getTime();
+      const hoursToKickoff = (kickoffMs - Date.now()) / 3600000;
+      if (hoursToKickoff <= 2) {
+        try {
+          const lineups = await fetchLineupsForFixture(
+            match.id,
+            (match as any).home_team_id,
+            (match as any).away_team_id,
+          );
+          if (lineups) {
+            // Merge into matches.stats preserving other keys
+            const { data: existing } = await supabase
+              .from("matches")
+              .select("stats")
+              .eq("id", match.id)
+              .single();
+            const currentStats = (existing?.stats as Record<string, unknown>) ?? {};
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await supabase
+              .from("matches")
+              .update({ stats: { ...currentStats, lineups } as any })
+              .eq("id", match.id);
+          }
+          await new Promise((r) => setTimeout(r, 600));
+        } catch {
+          // Lineup not available yet — not an error
+        }
+      }
+
       // Invalidate the match page cache so Next.js serves fresh injuries
       revalidatePath(`/partido/${match.id}`);
 
@@ -78,7 +108,7 @@ export async function GET(req: NextRequest) {
       );
 
       // Throttle to stay within API-Football rate limits
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 600));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`match=${match.id}: ${msg}`);

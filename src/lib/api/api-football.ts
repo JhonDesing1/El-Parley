@@ -428,6 +428,75 @@ export async function fetchInjuriesForFixture(fixtureId: number): Promise<
   });
 }
 
+// ── Lineups ───────────────────────────────────────────────────────────────────
+
+interface AfLineupPlayer {
+  player: { id: number; name: string; number: number; pos: string; grid: string; photo: string };
+}
+
+interface AfLineup {
+  team: { id: number; name: string; logo: string };
+  formation: string;
+  startXI: AfLineupPlayer[];
+  substitutes: AfLineupPlayer[];
+}
+
+export interface LineupPlayer {
+  name: string;
+  number: number;
+  pos: string; // "G" | "D" | "M" | "F"
+  photo?: string;
+  grid?: string; // e.g. "1:1" row:col
+}
+
+export interface TeamLineup {
+  formation: string;
+  startXI: LineupPlayer[];
+}
+
+export interface MatchLineups {
+  home: TeamLineup;
+  away: TeamLineup;
+}
+
+/**
+ * Fetches confirmed lineups for a fixture from API-Football `/fixtures/lineups`.
+ * The endpoint returns data only ~1 hour before kickoff.
+ * Returns null if lineups are not yet available or the fixture has no data.
+ */
+export async function fetchLineupsForFixture(
+  fixtureId: number,
+  homeTeamId: number,
+  awayTeamId: number,
+): Promise<MatchLineups | null> {
+  try {
+    const response = await af<AfLineup[]>("/fixtures/lineups", { fixture: fixtureId });
+    if (!response || response.length < 2) return null;
+
+    function mapTeam(lineup: AfLineup): TeamLineup {
+      return {
+        formation: lineup.formation ?? "",
+        startXI: lineup.startXI.map((p) => ({
+          name: p.player.name,
+          number: p.player.number,
+          pos: p.player.pos,
+          photo: p.player.photo || undefined,
+          grid: p.player.grid || undefined,
+        })),
+      };
+    }
+
+    const homeEntry = response.find((l) => l.team.id === homeTeamId) ?? response[0];
+    const awayEntry = response.find((l) => l.team.id === awayTeamId) ?? response[1];
+
+    if (!homeEntry?.startXI?.length || !awayEntry?.startXI?.length) return null;
+
+    return { home: mapTeam(homeEntry), away: mapTeam(awayEntry) };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchOddsForFixtures(fixtureId: number) {
   const response = await af<AfOddsResponse[]>("/odds", { fixture: fixtureId });
   if (!response.length) return [];
