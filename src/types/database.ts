@@ -1153,6 +1153,7 @@ export type Database = {
           id: number
           implied_prob: number
           is_premium: boolean | null
+          is_suggested: boolean
           kelly_fraction: number | null
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
@@ -1170,6 +1171,7 @@ export type Database = {
           id?: number
           implied_prob: number
           is_premium?: boolean | null
+          is_suggested?: boolean
           kelly_fraction?: number | null
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
@@ -1187,6 +1189,7 @@ export type Database = {
           id?: number
           implied_prob?: number
           is_premium?: boolean | null
+          is_suggested?: boolean
           kelly_fraction?: number | null
           market?: Database["public"]["Enums"]["market_type"]
           match_id?: number
@@ -1206,6 +1209,74 @@ export type Database = {
           },
           {
             foreignKeyName: "value_bets_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipster_picks: {
+        Row: {
+          id: number
+          tipster_name: string
+          match_id: number | null
+          match_label: string | null
+          league_label: string | null
+          kickoff: string | null
+          market: string
+          selection: string
+          odds: number
+          stake_units: number | null
+          result: Database["public"]["Enums"]["pick_result"]
+          profit_units: number | null
+          published: boolean
+          reasoning: string | null
+          notes: string | null
+          created_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: number
+          tipster_name?: string
+          match_id?: number | null
+          match_label?: string | null
+          league_label?: string | null
+          kickoff?: string | null
+          market: string
+          selection: string
+          odds: number
+          stake_units?: number | null
+          result?: Database["public"]["Enums"]["pick_result"]
+          profit_units?: number | null
+          published?: boolean
+          reasoning?: string | null
+          notes?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: number
+          tipster_name?: string
+          match_id?: number | null
+          match_label?: string | null
+          league_label?: string | null
+          kickoff?: string | null
+          market?: string
+          selection?: string
+          odds?: number
+          stake_units?: number | null
+          result?: Database["public"]["Enums"]["pick_result"]
+          profit_units?: number | null
+          published?: boolean
+          reasoning?: string | null
+          notes?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipster_picks_match_id_fkey"
             columns: ["match_id"]
             isOneToOne: false
             referencedRelation: "matches"

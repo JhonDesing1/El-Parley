@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Target, TrendingUp, Trophy, Clock } from "lucide-react";
+import { Target, TrendingUp, Trophy, Clock, Zap, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Metadata } from "next";
@@ -9,7 +9,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Picks del día — El Parley",
   description:
-    "Apuestas seleccionadas por El Parley con análisis de valor. Picks diarios con razonamiento estadístico.",
+    "Apuestas seleccionadas por El Parley con análisis de valor. Combinadas y picks diarios con razonamiento estadístico.",
 };
 
 const RESULT_STYLES: Record<string, string> = {
@@ -17,33 +17,35 @@ const RESULT_STYLES: Record<string, string> = {
   won:     "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
   lost:    "bg-red-500/15 text-red-400 border-red-500/25",
   void:    "bg-muted/50 text-muted-foreground border-border/40",
+  partial: "bg-blue-500/15 text-blue-400 border-blue-500/25",
 };
 const RESULT_LABELS: Record<string, string> = {
   pending: "Pendiente",
-  won: "Ganado",
-  lost: "Perdido",
-  void: "Nulo",
+  won:     "Ganado",
+  lost:    "Perdido",
+  void:    "Nulo",
+  partial: "Parcial",
 };
 
 const MARKET_LABELS: Record<string, string> = {
-  "1x2": "1X2",
-  btts: "Ambos anotan",
-  over_under_2_5: "+/- 2.5",
-  over_under_1_5: "+/- 1.5",
-  double_chance: "Doble oportunidad",
-  correct_score: "Resultado exacto",
-  asian_handicap: "Hándicap asiático",
-  draw_no_bet: "Empate no apuesta",
+  "1x2":              "1X2",
+  btts:               "Ambos anotan",
+  over_under_2_5:     "+/- 2.5",
+  over_under_1_5:     "+/- 1.5",
+  double_chance:      "Doble oportunidad",
+  correct_score:      "Resultado exacto",
+  asian_handicap:     "Hándicap asiático",
+  draw_no_bet:        "Empate no apuesta",
 };
 
 const SELECTION_LABELS: Record<string, string> = {
-  home: "Local",
-  draw: "Empate",
-  away: "Visitante",
-  over: "Más",
-  under: "Menos",
-  yes: "Sí",
-  no: "No",
+  home:      "Local",
+  draw:      "Empate",
+  away:      "Visitante",
+  over:      "Más",
+  under:     "Menos",
+  yes:       "Sí",
+  no:        "No",
   home_draw: "1X",
   home_away: "12",
   draw_away: "X2",
@@ -52,22 +54,88 @@ const SELECTION_LABELS: Record<string, string> = {
 export default async function PicksPage() {
   const supabase = (await createClient()) as any;
 
-  // Public picks (RLS only returns published=true)
-  const { data: picks } = await supabase
-    .from("tipster_picks")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  // Start of today UTC
+  const now = new Date();
+  const todayUTC = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).toISOString();
 
-  const rows = (picks ?? []) as any[];
+  // Start of yesterday UTC (for recently resolved suggested bets)
+  const yesterdayUTC = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1),
+  ).toISOString();
 
-  // Global stats
-  const resolved = rows.filter((p) => p.result !== "pending" && p.result !== "void");
+  const [
+    { data: tipsterPicks },
+    { data: suggestedBets },
+    { data: todayParlays },
+  ] = await Promise.all([
+    // Manual tipster picks (published, last 50)
+    supabase
+      .from("tipster_picks")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50),
+
+    // Apuestas sugeridas: pending (any age) + resolved since yesterday
+    supabase
+      .from("value_bets")
+      .select(`
+        id, market, selection, price, model_prob, edge, result, reasoning, detected_at,
+        match:matches(
+          kickoff,
+          home_team:teams!home_team_id(name),
+          away_team:teams!away_team_id(name),
+          league:leagues(name)
+        )
+      `)
+      .eq("is_suggested", true)
+      .or(`result.eq.pending,detected_at.gte.${yesterdayUTC}`)
+      .order("detected_at", { ascending: false })
+      .limit(20),
+
+    // Today's free parlays with legs
+    supabase
+      .from("parlays")
+      .select(`
+        id, title, description, total_odds, total_probability, status, created_at,
+        parlay_legs(
+          id, market, selection, price, model_prob, result, leg_order,
+          match:matches(
+            kickoff,
+            home_team:teams!home_team_id(name),
+            away_team:teams!away_team_id(name),
+            league:leagues(name)
+          )
+        )
+      `)
+      .eq("tier", "free")
+      .gte("created_at", todayUTC)
+      .order("created_at", { ascending: false })
+      .limit(4),
+  ]);
+
+  const picks = (tipsterPicks ?? []) as any[];
+  const suggested = (suggestedBets ?? []) as any[];
+  const parlays = (todayParlays ?? []) as any[];
+
+  // Sort parlay legs by leg_order
+  for (const p of parlays) {
+    if (Array.isArray(p.parlay_legs)) {
+      p.parlay_legs.sort((a: any, b: any) => a.leg_order - b.leg_order);
+    }
+  }
+
+  // Tipster stats
+  const resolved = picks.filter((p) => p.result !== "pending" && p.result !== "void");
   const won = resolved.filter((p) => p.result === "won").length;
   const winRate = resolved.length > 0 ? Math.round((won / resolved.length) * 100) : null;
-  const totalUnits = rows.reduce((s, p) => s + (Number(p.profit_units) || 0), 0);
-  const pending = rows.filter((p) => p.result === "pending");
-  const historical = rows.filter((p) => p.result !== "pending");
+  const totalUnits = picks.reduce((s: number, p: any) => s + (Number(p.profit_units) || 0), 0);
+  const pendingPicks = picks.filter((p) => p.result === "pending");
+  const historicalPicks = picks.filter((p) => p.result !== "pending");
+
+  const pendingSuggested = suggested.filter((b) => b.result === "pending");
+  const resolvedSuggested = suggested.filter((b) => b.result !== "pending");
 
   return (
     <div className="container max-w-3xl py-10">
@@ -78,11 +146,11 @@ export default async function PicksPage() {
         </div>
         <h1 className="font-display text-3xl font-bold tracking-tight">Picks del día</h1>
         <p className="mt-2 text-muted-foreground">
-          Apuestas seleccionadas con análisis estadístico de valor
+          Apuestas sugeridas, combinadas y picks con análisis estadístico
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Tipster stats */}
       {resolved.length > 0 && (
         <div className="mb-8 grid grid-cols-3 gap-3">
           <StatCard
@@ -113,36 +181,84 @@ export default async function PicksPage() {
         </div>
       )}
 
-      {/* Pending picks */}
-      {pending.length > 0 && (
+      {/* ── Combinadas del día ──────────────────────────────────────── */}
+      {parlays.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            <Layers className="h-4 w-4" />
+            Combinadas del día
+          </h2>
+          <div className="space-y-3">
+            {parlays.map((parlay) => (
+              <ParlayCard key={parlay.id} parlay={parlay} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Apuestas Sugeridas ──────────────────────────────────────── */}
+      {(pendingSuggested.length > 0 || resolvedSuggested.length > 0) && (
+        <section className="mb-8">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            <Zap className="h-4 w-4" />
+            Apuestas Sugeridas
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Selecciones con probabilidad del modelo ≥ 80% y cuota mínima 1.55
+          </p>
+
+          {pendingSuggested.length > 0 && (
+            <div className="mb-4 space-y-2">
+              {pendingSuggested.map((bet) => (
+                <SuggestedBetCard key={bet.id} bet={bet} />
+              ))}
+            </div>
+          )}
+
+          {resolvedSuggested.length > 0 && (
+            <>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Recientes resueltas
+              </p>
+              <div className="space-y-2">
+                {resolvedSuggested.map((bet) => (
+                  <SuggestedBetCard key={bet.id} bet={bet} compact />
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* ── Picks del Tipster ───────────────────────────────────────── */}
+      {pendingPicks.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             <Clock className="h-4 w-4" />
-            Activos
+            Picks activos
           </h2>
           <div className="space-y-3">
-            {pending.map((pick) => (
+            {pendingPicks.map((pick) => (
               <PickCard key={pick.id} pick={pick} />
             ))}
           </div>
         </section>
       )}
 
-      {/* Historical picks */}
-      {historical.length > 0 && (
+      {historicalPicks.length > 0 && (
         <section>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Historial
+            Historial de picks
           </h2>
           <div className="space-y-2">
-            {historical.map((pick) => (
+            {historicalPicks.map((pick) => (
               <PickCard key={pick.id} pick={pick} compact />
             ))}
           </div>
         </section>
       )}
 
-      {rows.length === 0 && (
+      {picks.length === 0 && suggested.length === 0 && parlays.length === 0 && (
         <Card className="p-12 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             <Target className="h-6 w-6" />
@@ -159,6 +275,136 @@ export default async function PicksPage() {
 
 // ── Components ────────────────────────────────────────────────────────────────
 
+function ParlayCard({ parlay }: { parlay: any }) {
+  const legs: any[] = parlay.parlay_legs ?? [];
+  const prob = Math.round((parlay.total_probability ?? 0) * 100);
+  const resultStyle = RESULT_STYLES[parlay.status] ?? RESULT_STYLES.pending;
+  const resultLabel = RESULT_LABELS[parlay.status] ?? "Pendiente";
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold leading-tight">{parlay.title}</p>
+          {parlay.description && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{parlay.description}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${resultStyle}`}
+          >
+            {resultLabel}
+          </span>
+          <div className="text-right">
+            <p className="font-mono text-lg font-bold tabular-nums">
+              x{Number(parlay.total_odds).toFixed(2)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{prob}% prob.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Legs */}
+      <div className="space-y-1.5 border-t pt-3">
+        {legs.map((leg, i) => {
+          const match = leg.match as any;
+          const home = match?.home_team?.name ?? "Local";
+          const away = match?.away_team?.name ?? "Visitante";
+          const league = match?.league?.name ?? "";
+          const kickoff = match?.kickoff
+            ? format(new Date(match.kickoff), "d MMM · HH:mm", { locale: es })
+            : null;
+          const marketLabel = MARKET_LABELS[leg.market] ?? leg.market;
+          const selectionLabel = SELECTION_LABELS[leg.selection] ?? leg.selection;
+          const legResult = RESULT_STYLES[leg.result] ?? RESULT_STYLES.pending;
+
+          return (
+            <div key={leg.id ?? i} className="flex items-center justify-between gap-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <span
+                  className={`mr-1.5 inline-flex items-center rounded border px-1.5 py-px text-[10px] font-bold ${legResult}`}
+                >
+                  {RESULT_LABELS[leg.result] ?? "?"}
+                </span>
+                <span className="font-medium">{home} vs {away}</span>
+                <span className="text-muted-foreground">
+                  {" "}· {marketLabel}: <span className="font-medium text-foreground">{selectionLabel}</span>
+                </span>
+                {league && (
+                  <span className="ml-1 text-xs text-muted-foreground">({league})</span>
+                )}
+                {kickoff && (
+                  <span className="ml-1 text-xs text-muted-foreground">· {kickoff}</span>
+                )}
+              </div>
+              <span className="shrink-0 font-mono text-sm font-bold tabular-nums">
+                {Number(leg.price).toFixed(2)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function SuggestedBetCard({ bet, compact = false }: { bet: any; compact?: boolean }) {
+  const match = bet.match as any;
+  const home = match?.home_team?.name ?? "Local";
+  const away = match?.away_team?.name ?? "Visitante";
+  const league = match?.league?.name ?? "";
+  const kickoff = match?.kickoff
+    ? format(new Date(match.kickoff), "d MMM · HH:mm", { locale: es })
+    : null;
+  const marketLabel = MARKET_LABELS[bet.market] ?? bet.market;
+  const selectionLabel = SELECTION_LABELS[bet.selection] ?? bet.selection;
+  const resultStyle = RESULT_STYLES[bet.result] ?? RESULT_STYLES.pending;
+  const prob = Math.round((bet.model_prob ?? 0) * 100);
+
+  return (
+    <Card className={compact ? "p-3" : "p-4"}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${resultStyle}`}
+            >
+              {RESULT_LABELS[bet.result] ?? "Pendiente"}
+            </span>
+            <Badge variant="outline" className="text-[10px]">
+              {marketLabel}
+            </Badge>
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+              {prob}% prob.
+            </span>
+          </div>
+
+          <p className={`font-semibold ${compact ? "text-sm" : "text-base"}`}>
+            {home} vs {away}
+          </p>
+          <p className={`text-muted-foreground ${compact ? "text-xs" : "text-sm"}`}>
+            <span className="font-medium text-foreground">{selectionLabel}</span>
+            {league && ` · ${league}`}
+            {kickoff && ` · ${kickoff}`}
+          </p>
+
+          {!compact && bet.reasoning && (
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{bet.reasoning}</p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <p className={`font-mono font-bold tabular-nums ${compact ? "text-base" : "text-2xl"}`}>
+            {Number(bet.price).toFixed(2)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">cuota</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function PickCard({ pick, compact = false }: { pick: any; compact?: boolean }) {
   const matchName = pick.match_label ?? "Partido";
   const league = pick.league_label ?? "";
@@ -170,7 +416,7 @@ function PickCard({ pick, compact = false }: { pick: any; compact?: boolean }) {
   const resultStyle = RESULT_STYLES[pick.result] ?? RESULT_STYLES.void;
 
   return (
-    <Card className={`${compact ? "p-3" : "p-5"}`}>
+    <Card className={compact ? "p-3" : "p-5"}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         {/* Left */}
         <div className="min-w-0 flex-1">

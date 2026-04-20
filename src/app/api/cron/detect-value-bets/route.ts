@@ -139,6 +139,8 @@ export async function GET(req: NextRequest) {
         result: "pending" as const,
         // Las de edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,
+        // Apuesta sugerida: prob. del modelo ≥ 80% y cuota ≥ 1.55 (0.55 ganancia mínima)
+        is_suggested: modelProb >= 0.80 && o.price >= 1.55,
         reasoning: buildReasoning(o.market, o.selection, modelProb, result.impliedProb, result.edge, match.model_expected_goals_home!, match.model_expected_goals_away!),
       });
     }

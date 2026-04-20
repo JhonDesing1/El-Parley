@@ -9,13 +9,16 @@ export const maxDuration = 60;
 /**
  * Vercel Cron — runs every 30 minutes.
  *
- * Resolves match scores and settles open value_bets + user_picks once
- * matches finish. Without this cron, picks and value bets stay "pending"
- * forever and the leaderboard/ROI stats are meaningless.
+ * Resolves match scores and settles open value_bets + tipster_picks +
+ * user_picks once matches finish. Without this cron, picks and value bets
+ * stay "pending" forever and the leaderboard/ROI stats are meaningless.
  *
  * Scope per run:
  *  - Live matches (any league)
  *  - Scheduled matches whose kickoff was >105 min ago (should be over)
+ *
+ * Auto-resolution of tipster_picks only applies to recognized market/selection
+ * combos (1x2, over_under_2_5, btts). Others stay pending for manual resolution.
  */
 
 function resolveOutcome(
@@ -161,6 +164,40 @@ export async function GET(req: NextRequest) {
               text: `${emoji} <b>Pick resuelto: ${result === "won" ? "GANADO" : "PERDIDO"}</b>${plText}\n\nVe tu historial en elparley.com/picks`,
             });
           }
+        }
+      }
+
+      // ── Resolve tipster_picks ──────────────────────────────────
+      // Only auto-resolves picks linked to a match (match_id set) with
+      // recognized market/selection combos. Unrecognized combos stay
+      // pending so the admin can resolve them manually.
+      const KNOWN_COMBOS = new Set([
+        "1x2:home", "1x2:draw", "1x2:away",
+        "over_under_2_5:over", "over_under_2_5:under",
+        "btts:yes", "btts:no",
+      ]);
+
+      const { data: pendingTipsterPicks } = await supabase
+        .from("tipster_picks")
+        .select("id, market, selection")
+        .eq("match_id", match.id)
+        .eq("result", "pending");
+
+      if (pendingTipsterPicks?.length) {
+        for (const pick of pendingTipsterPicks) {
+          const combo = `${pick.market}:${pick.selection}`;
+          if (!KNOWN_COMBOS.has(combo)) continue; // leave for manual resolution
+
+          const result = isVoid
+            ? "void"
+            : resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+
+          await supabase
+            .from("tipster_picks")
+            .update({ result })
+            .eq("id", pick.id);
+
+          betsSettled++;
         }
       }
 
