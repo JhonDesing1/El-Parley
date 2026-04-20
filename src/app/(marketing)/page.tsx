@@ -44,13 +44,14 @@ export default async function HomePage() {
       .order("kickoff", { ascending: true })
       .limit(12),
 
-    // Bets gratuitas: confianza media/baja — las muestra la plataforma gratis (55% acierto)
+    // Apuestas sugeridas del día (is_suggested = true) — visibles para todos
     supabase
       .from("value_bets")
       .select(betSelect)
       .eq("result", "pending")
-      .in("confidence", ["medium", "low"])
-      .order("edge", { ascending: false })
+      .eq("is_suggested", true)
+      .eq("is_premium", false)
+      .order("model_prob", { ascending: false })
       .limit(3),
 
     // Bets premium: alta confianza (edge ≥ 8% + modelProb ≥ 40%) — bloqueadas (60% acierto)
@@ -58,7 +59,7 @@ export default async function HomePage() {
       .from("value_bets")
       .select(betSelect)
       .eq("result", "pending")
-      .eq("confidence", "high")
+      .eq("is_premium", true)
       .order("edge", { ascending: false })
       .limit(3),
 
@@ -122,13 +123,13 @@ export default async function HomePage() {
           <header className="mb-8">
             <Badge variant="value" className="mb-2">
               <Sparkles className="mr-1 h-3 w-3" />
-              VALUE BETS DETECTADAS HOY
+              APUESTAS SUGERIDAS DEL DÍA
             </Badge>
             <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
-              Apuestas con valor matemático
+              Las mejores apuestas de hoy
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Nuestro modelo Poisson + xG detecta cuotas mal valoradas por las casas. Sin corazonadas, solo estadística.
+              Selecciones con probabilidad del modelo ≥ 80% y cuota mínima 1.55. Actualizadas cada 10 minutos.
             </p>
           </header>
 
@@ -136,7 +137,7 @@ export default async function HomePage() {
           {freeValueBets.length > 0 && (
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Picks gratuitos</span>
+                <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Apuestas sugeridas</span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
                   <Target className="h-3 w-3 text-amber-400" />
                   0.55 cuotas acertadas
@@ -346,8 +347,8 @@ export default async function HomePage() {
         <div className="grid gap-6 md:grid-cols-3">
           <FeatureCard
             icon={<Sparkles className="h-6 w-6" />}
-            title="Value Bets de alta confianza"
-            desc="Solo selecciones con edge ≥8% validadas por modelo Poisson + xG. Sin tipsters, solo estadística."
+            title="Apuestas sugeridas del día"
+            desc="Selecciones con probabilidad del modelo ≥80% y cuota mínima 1.55, validadas por Poisson + xG. Sin corazonadas, solo estadística."
             color="gold"
           />
           <FeatureCard
