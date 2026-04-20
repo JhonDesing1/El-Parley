@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Vercel Cron — corre cada 10 minutos.
+ * Vercel Cron — corre cada 10 minutos (vercel.json: "*/10 * * * *").
  *
  * Lógica:
  *  1. Lee partidos próximos 48h con xG cargado

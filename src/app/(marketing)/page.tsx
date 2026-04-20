@@ -10,7 +10,7 @@ import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Za
 import Image from "next/image";
 import Link from "next/link";
 
-export const revalidate = 900;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const supabase = await createClient();

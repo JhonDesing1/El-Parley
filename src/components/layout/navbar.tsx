@@ -36,8 +36,9 @@ export function Navbar() {
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center">
-          <Image src="/logo.png" alt="El Parley" width={140} height={40} className="h-10 w-auto" priority />
+        <Link href="/" className="flex items-center gap-2.5">
+          <Image src="/logo.png" alt="El Parley" width={161} height={46} className="h-[46px] w-auto" priority />
+          <span className="text-xl font-bold tracking-wide" style={{ color: "#3D5A3E" }}>EL PARLEY</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -87,8 +88,9 @@ export function Navbar() {
             className="w-full border-border bg-background sm:max-w-sm"
           >
             <SheetHeader className="border-b border-border pb-4">
-              <SheetTitle className="flex items-center">
-                <Image src="/logo.png" alt="El Parley" width={120} height={36} className="h-9 w-auto" />
+              <SheetTitle className="flex items-center gap-2.5">
+                <Image src="/logo.png" alt="El Parley" width={138} height={41} className="h-[41px] w-auto" />
+                <span className="text-lg font-bold tracking-wide" style={{ color: "#3D5A3E" }}>EL PARLEY</span>
               </SheetTitle>
             </SheetHeader>
 
