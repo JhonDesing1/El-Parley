@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "Partidos destacados con apuestas de alta probabilidad seleccionadas por el modelo matemático.",
 };
 
-export const revalidate = 300;
+export const revalidate = 0;
 
 const MARKET_LABELS: Record<string, string> = {
   "1x2": "1X2",
