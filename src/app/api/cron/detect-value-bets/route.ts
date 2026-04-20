@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { calculateMatchProbabilities } from "@/lib/betting/poisson";
+import {
+  calculateMatchProbabilities,
+  calculateCornerProbabilities,
+  calculateCardProbabilities,
+  calculateHandicapProbability,
+  type CornerProbabilities,
+  type CardProbabilities,
+} from "@/lib/betting/poisson";
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
+import {
+  LEAGUE_AVG_CORNERS,
+  LEAGUE_AVG_CARDS,
+  DEFAULT_CORNERS,
+  DEFAULT_CARDS,
+} from "@/lib/betting/stats";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -11,37 +24,67 @@ export const maxDuration = 60;
 /**
  * Vercel Cron — corre cada 10 minutos (schedule: cada 10 min en vercel.json).
  *
- * Lógica:
- *  1. Lee partidos próximos 48h con xG cargado
- *  2. Calcula probabilidades Poisson + Dixon-Coles con la lib de betting
- *  3. Compara contra cada cuota disponible
- *  4. Si edge >= 3% escribe en value_bets (borra pendientes del mismo partido antes)
+ * Mercados soportados:
+ *  - Goles: 1x2, over/under 1.5/2.5/3.5, BTTS, doble oportunidad
+ *  - Córners: over/under 8.5/9.5/10.5 (modelo Poisson con medias por liga)
+ *  - Tarjetas: over/under 3.5/4.5 (modelo Poisson con medias por liga)
+ *  - Hándicap asiático: líneas X.5 derivadas de la matriz de marcadores
  *
  * Exclusión: matches de HIGH_PRIORITY_LEAGUE_IDS con kickoff en <2h son
  * manejados por sync-live-odds (cada 5 min) para evitar race conditions en
  * el delete+insert de value_bets.
  */
 
-type MarketKey =
-  | "1x2:home"
-  | "1x2:draw"
-  | "1x2:away"
-  | "over_under_2_5:over"
-  | "over_under_2_5:under"
-  | "btts:yes"
-  | "btts:no";
+// ── Mercados de goles ─────────────────────────────────────────────────────────
 
-type MatchProbs = ReturnType<typeof calculateMatchProbabilities>;
+type GoalMarketKey =
+  | "1x2:home" | "1x2:draw" | "1x2:away"
+  | "over_under_1_5:over" | "over_under_1_5:under"
+  | "over_under_2_5:over" | "over_under_2_5:under"
+  | "over_under_3_5:over" | "over_under_3_5:under"
+  | "btts:yes" | "btts:no"
+  | "double_chance:1x" | "double_chance:12" | "double_chance:x2";
 
-const MARKET_PROB: Record<MarketKey, (p: MatchProbs) => number> = {
-  "1x2:home": (p) => p.home,
-  "1x2:draw": (p) => p.draw,
-  "1x2:away": (p) => p.away,
-  "over_under_2_5:over": (p) => p.over25,
+type GoalProbs = ReturnType<typeof calculateMatchProbabilities>;
+
+const GOAL_MARKET_PROB: Record<GoalMarketKey, (p: GoalProbs) => number> = {
+  "1x2:home":             (p) => p.home,
+  "1x2:draw":             (p) => p.draw,
+  "1x2:away":             (p) => p.away,
+  "over_under_1_5:over":  (p) => p.over15,
+  "over_under_1_5:under": (p) => p.under15,
+  "over_under_2_5:over":  (p) => p.over25,
   "over_under_2_5:under": (p) => p.under25,
-  "btts:yes": (p) => p.btts,
-  "btts:no": (p) => p.noBtts,
+  "over_under_3_5:over":  (p) => p.over35,
+  "over_under_3_5:under": (p) => p.under35,
+  "btts:yes":             (p) => p.btts,
+  "btts:no":              (p) => p.noBtts,
+  "double_chance:1x":     (p) => p.dc1x,
+  "double_chance:12":     (p) => p.dc12,
+  "double_chance:x2":     (p) => p.dcx2,
 };
+
+// ── Mercados de córners ───────────────────────────────────────────────────────
+
+const CORNER_MARKET_PROB: Record<string, (p: CornerProbabilities) => number> = {
+  "over:8.5":   (p) => p.over85,
+  "under:8.5":  (p) => p.under85,
+  "over:9.5":   (p) => p.over95,
+  "under:9.5":  (p) => p.under95,
+  "over:10.5":  (p) => p.over105,
+  "under:10.5": (p) => p.under105,
+};
+
+// ── Mercados de tarjetas ──────────────────────────────────────────────────────
+
+const CARD_MARKET_PROB: Record<string, (p: CardProbabilities) => number> = {
+  "over:3.5":  (p) => p.over35,
+  "under:3.5": (p) => p.under35,
+  "over:4.5":  (p) => p.over45,
+  "under:4.5": (p) => p.under45,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -69,7 +112,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("matches")
-    .select("id, model_expected_goals_home, model_expected_goals_away")
+    .select("id, league_id, model_expected_goals_home, model_expected_goals_away")
     .gte("kickoff", now.toISOString())
     .lte("kickoff", in48h.toISOString())
     .eq("status", "scheduled")
@@ -97,25 +140,69 @@ export async function GET(req: NextRequest) {
   let detected = 0;
 
   for (const match of matches) {
-    const probs = calculateMatchProbabilities(
-      match.model_expected_goals_home!,
-      match.model_expected_goals_away!,
-    );
+    const xgHome = match.model_expected_goals_home!;
+    const xgAway = match.model_expected_goals_away!;
+    const leagueId = match.league_id ?? 0;
+
+    // Probabilidades de goles (Poisson + Dixon-Coles)
+    const goalProbs = calculateMatchProbabilities(xgHome, xgAway);
+
+    // Probabilidades de córners (Poisson con medias históricas por liga)
+    const cornerAvg = LEAGUE_AVG_CORNERS[leagueId] ?? DEFAULT_CORNERS;
+    const cornerProbs = calculateCornerProbabilities(cornerAvg.home, cornerAvg.away);
+
+    // Probabilidades de tarjetas (Poisson con medias históricas por liga)
+    const cardAvg = LEAGUE_AVG_CARDS[leagueId] ?? DEFAULT_CARDS;
+    const cardProbs = calculateCardProbabilities(cardAvg.home, cardAvg.away);
 
     const { data: odds } = await supabase
       .from("odds")
-      .select("id, bookmaker_id, market, selection, price")
+      .select("id, bookmaker_id, market, selection, price, line")
       .eq("match_id", match.id);
 
     if (!odds?.length) continue;
 
     const bets = [];
-    for (const o of odds) {
-      const key = `${o.market}:${o.selection}` as MarketKey;
-      const probGetter = MARKET_PROB[key];
-      if (!probGetter) continue;
 
-      const modelProb = probGetter(probs);
+    for (const o of odds) {
+      let modelProb: number | undefined;
+      let reasoningCtxHome = xgHome;
+      let reasoningCtxAway = xgAway;
+
+      // ── Mercados de goles ─────────────────────────────────────────────────
+      const goalKey = `${o.market}:${o.selection}` as GoalMarketKey;
+      if (goalKey in GOAL_MARKET_PROB) {
+        modelProb = GOAL_MARKET_PROB[goalKey](goalProbs);
+      }
+
+      // ── Córners ───────────────────────────────────────────────────────────
+      else if (o.market === "corners_over_under" && o.line != null) {
+        const getter = CORNER_MARKET_PROB[`${o.selection}:${o.line}`];
+        if (getter) {
+          modelProb = getter(cornerProbs);
+          // Pasa los promedios de córners como contexto para el reasoning
+          reasoningCtxHome = cornerAvg.home;
+          reasoningCtxAway = cornerAvg.away;
+        }
+      }
+
+      // ── Tarjetas ──────────────────────────────────────────────────────────
+      else if (o.market === "cards_over_under" && o.line != null) {
+        const getter = CARD_MARKET_PROB[`${o.selection}:${o.line}`];
+        if (getter) {
+          modelProb = getter(cardProbs);
+          reasoningCtxHome = cardAvg.home;
+          reasoningCtxAway = cardAvg.away;
+        }
+      }
+
+      // ── Hándicap asiático (solo líneas .5) ────────────────────────────────
+      else if (o.market === "asian_handicap" && o.line != null) {
+        const side = o.selection as "home" | "away";
+        modelProb = calculateHandicapProbability(xgHome, xgAway, side, o.line);
+      }
+
+      if (modelProb === undefined) continue;
 
       let result;
       try {
@@ -137,11 +224,20 @@ export async function GET(req: NextRequest) {
         kelly_fraction: result.kelly,
         confidence: result.confidence,
         result: "pending" as const,
-        // Las de edge muy alto (>6%) son visibles gratis; las moderadas son premium
+        // Bets con edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,
-        // Apuesta sugerida: prob. del modelo ≥ 80% y cuota ≥ 1.55 (0.55 ganancia mínima)
+        // Apuesta sugerida: prob. del modelo ≥ 80% y cuota ≥ 1.55
         is_suggested: modelProb >= 0.80 && o.price >= 1.55,
-        reasoning: buildReasoning(o.market, o.selection, modelProb, result.impliedProb, result.edge, match.model_expected_goals_home!, match.model_expected_goals_away!),
+        reasoning: buildReasoning(
+          o.market,
+          o.selection,
+          modelProb,
+          result.impliedProb,
+          result.edge,
+          reasoningCtxHome,
+          reasoningCtxAway,
+          o.line,
+        ),
       });
     }
 

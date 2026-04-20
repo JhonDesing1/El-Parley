@@ -19,14 +19,11 @@ export default async function HomePage() {
   const in48h = new Date(new Date().getTime() + 48 * 3600 * 1000).toISOString();
 
   const betSelect = `
-    id, match_id, market, selection, price, edge, model_prob,
+    id, match_id, market, selection, line, price, edge, model_prob,
     kelly_fraction, confidence, reasoning, is_premium,
     bookmaker:bookmakers(id, slug, name, logo_url, affiliate_url),
     match:matches(kickoff, home_team:teams!home_team_id(id,name,short_name,logo_url), away_team:teams!away_team_id(id,name,short_name,logo_url), league:leagues(id,name,slug,country,logo_url,flag_url))
   `;
-
-  // Próximos partidos + bets gratuitas (media/baja confianza) + teasers premium (alta confianza)
-  const TOP_LEAGUE_COUNTRIES = ["Spain", "England", "Germany"];
 
   const [{ data: matchesRaw }, { data: freeBetsRaw }, { data: premiumBetsRaw }, { data: topLeagueBetsRaw }] = await Promise.all([
     supabase
@@ -63,14 +60,14 @@ export default async function HomePage() {
       .order("edge", { ascending: false })
       .limit(3),
 
-    // Cuotas grandes ligas (La Liga, Premier League, Bundesliga) — ordenadas por model_prob desc
+    // Top picks de todas las ligas — ordenados por model_prob desc
     supabase
       .from("value_bets")
       .select(betSelect)
       .eq("result", "pending")
       .eq("is_premium", false)
       .order("model_prob", { ascending: false })
-      .limit(50),
+      .limit(60),
   ]);
 
   const allBets = [...(freeBetsRaw ?? []), ...(premiumBetsRaw ?? [])];
@@ -93,25 +90,18 @@ export default async function HomePage() {
   const premiumTeasers = premiumBetsRaw ?? [];
   const hasAnyBets = freeValueBets.length > 0 || premiumTeasers.length > 0;
 
-  const TOP_LEAGUES_CONFIG = [
-    { country: "Spain", name: "La Liga", flag: "🇪🇸" },
-    { country: "England", name: "Premier League", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-    { country: "Germany", name: "Bundesliga", flag: "🇩🇪" },
-  ];
-
-  const topLeagueBetsAll = (topLeagueBetsRaw ?? []).filter((vb: any) =>
-    TOP_LEAGUE_COUNTRIES.includes(vb.match?.league?.country),
-  );
-
-  const betsByLeague = TOP_LEAGUES_CONFIG.map((league) => ({
-    ...league,
-    bets: topLeagueBetsAll
-      .filter((vb: any) => vb.match?.league?.country === league.country)
-      .slice(0, 4),
-    leagueMeta: topLeagueBetsAll.find(
-      (vb: any) => vb.match?.league?.country === league.country,
-    )?.match?.league ?? null,
-  }));
+  // Agrupa los picks por liga, mostrando hasta 4 picks por liga y hasta 4 ligas
+  const leagueMap = new Map<number, { leagueMeta: any; bets: any[] }>();
+  for (const vb of (topLeagueBetsRaw ?? []) as any[]) {
+    const leagueId = vb.match?.league?.id;
+    if (!leagueId) continue;
+    if (!leagueMap.has(leagueId)) {
+      leagueMap.set(leagueId, { leagueMeta: vb.match.league, bets: [] });
+    }
+    const entry = leagueMap.get(leagueId)!;
+    if (entry.bets.length < 4) entry.bets.push(vb);
+  }
+  const betsByLeague = Array.from(leagueMap.values()).slice(0, 4);
 
   return (
     <>
@@ -251,62 +241,71 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── GRANDES LIGAS ── */}
+      {/* ── PICKS POR LIGA ── */}
       <section className="container py-12">
         <header className="mb-8">
           <Badge variant="outline" className="mb-2 border-border bg-muted/60 text-muted-foreground">
             <Globe className="mr-1 h-3 w-3" />
-            GRANDES LIGAS
+            PICKS POR LIGA
           </Badge>
           <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
             Cuotas con mayor probabilidad de acierto
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Los picks mejor valorados por nuestro modelo en La Liga, Premier League y Bundesliga.
+            Los picks mejor valorados por nuestro modelo — resultados, goles, doble oportunidad y más, de todas las ligas disponibles.
           </p>
         </header>
 
-        <div className="grid gap-8 md:grid-cols-3">
-          {betsByLeague.map(({ country, name, flag, bets, leagueMeta }) => (
-            <div key={country} className="flex flex-col gap-3">
-              {/* League header */}
-              <div className="flex items-center gap-2 border-b border-border/40 pb-3">
-                {leagueMeta?.logo_url ? (
-                  <Image
-                    src={leagueMeta.logo_url}
-                    alt={name}
-                    width={20}
-                    height={20}
-                    sizes="20px"
-                    className="object-contain"
-                  />
-                ) : (
-                  <span className="text-base">{flag}</span>
-                )}
-                <span className="font-display font-bold">{name}</span>
-                {bets.length > 0 && (
-                  <Badge variant="outline" className="ml-auto text-[10px]">
+        {betsByLeague.length > 0 ? (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {betsByLeague.map(({ leagueMeta, bets }) => (
+              <div key={leagueMeta?.id ?? Math.random()} className="flex flex-col gap-3">
+                {/* League header */}
+                <div className="flex items-center gap-2 border-b border-border/40 pb-3">
+                  {leagueMeta?.logo_url ? (
+                    <Image
+                      src={leagueMeta.logo_url}
+                      alt={leagueMeta.name ?? "Liga"}
+                      width={20}
+                      height={20}
+                      sizes="20px"
+                      className="object-contain"
+                    />
+                  ) : (
+                    leagueMeta?.flag_url ? (
+                      <Image
+                        src={leagueMeta.flag_url}
+                        alt={leagueMeta.country ?? ""}
+                        width={20}
+                        height={14}
+                        sizes="20px"
+                        className="object-contain"
+                      />
+                    ) : (
+                      <Trophy className="h-4 w-4 text-muted-foreground/60" />
+                    )
+                  )}
+                  <span className="font-display font-bold truncate">{leagueMeta?.name ?? "Liga"}</span>
+                  <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
                     {bets.length} pick{bets.length > 1 ? "s" : ""}
                   </Badge>
-                )}
-              </div>
+                </div>
 
-              {bets.length > 0 ? (
-                bets.map((vb: any) => (
+                {bets.map((vb: any) => (
                   <LeaguePickRow key={vb.id} vb={vb} />
-                ))
-              ) : (
-                <Card className="flex flex-col items-center justify-center gap-2 p-8 text-center">
-                  <Trophy className="h-8 w-8 text-muted-foreground/40" />
-                  <p className="text-sm font-medium text-muted-foreground">Sin picks detectados</p>
-                  <p className="text-xs text-muted-foreground">
-                    Vuelve más tarde — el modelo actualiza cada 10 min.
-                  </p>
-                </Card>
-              )}
-            </div>
-          ))}
-        </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Card className="flex flex-col items-center justify-center gap-2 p-12 text-center">
+            <Trophy className="h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm font-medium text-muted-foreground">Sin picks detectados</p>
+            <p className="text-xs text-muted-foreground">
+              Vuelve más tarde — el modelo actualiza cada 10 min.
+            </p>
+          </Card>
+        )}
       </section>
 
       <section className="container py-12">
@@ -369,6 +368,25 @@ export default async function HomePage() {
   );
 }
 
+const SELECTION_LABEL: Record<string, string> = {
+  home: "Local", draw: "Empate", away: "Visitante",
+  over: "Más", under: "Menos",
+  yes: "Ambos anotan", no: "No ambos anotan",
+  "1x": "1X (Local/Empate)", x2: "X2 (Empate/Visitante)", "12": "12 (Sin empate)",
+};
+
+const MARKET_LABEL: Record<string, string> = {
+  "1x2": "Resultado",
+  "btts": "Ambos marcan",
+  "over_under_1_5": "+/- 1.5 goles",
+  "over_under_2_5": "+/- 2.5 goles",
+  "over_under_3_5": "+/- 3.5 goles",
+  "double_chance": "Doble oportunidad",
+  "corners_over_under": "Córners",
+  "cards_over_under": "Tarjetas",
+  "asian_handicap": "Hándicap asiático",
+};
+
 function LeaguePickRow({ vb }: { vb: any }) {
   const modelPct = Math.round(vb.model_prob * 100);
   const edgePct = (vb.edge * 100).toFixed(1);
@@ -389,6 +407,16 @@ function LeaguePickRow({ vb }: { vb: any }) {
     hour12: false,
     timeZone: "America/Bogota",
   });
+
+  const selectionLabel = SELECTION_LABEL[vb.selection] ?? vb.selection;
+  const baseMarketLabel = MARKET_LABEL[vb.market] ?? vb.market;
+  // Añade la línea al label cuando aplica (ej: "Córners 9.5", "Tarjetas 3.5", "Hándicap +1.5")
+  const marketLabel =
+    vb.line != null
+      ? vb.market === "asian_handicap"
+        ? `${baseMarketLabel} ${vb.line > 0 ? "+" : ""}${vb.line}`
+        : `${baseMarketLabel} ${vb.line}`
+      : baseMarketLabel;
 
   return (
     <a
@@ -412,8 +440,9 @@ function LeaguePickRow({ vb }: { vb: any }) {
           <span className="font-normal text-muted-foreground">vs</span>{" "}
           {vb.match.away_team.name}
         </p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {vb.selection}
+        <p className="mt-0.5 truncate text-xs font-medium">
+          {selectionLabel}
+          <span className="ml-1 font-normal text-muted-foreground">· {marketLabel}</span>
         </p>
         <div className="mt-1.5 flex items-center gap-2">
           <span className="inline-flex items-center rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums">

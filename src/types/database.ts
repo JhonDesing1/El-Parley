@@ -735,9 +735,9 @@ export type Database = {
           roi_30d: number | null
           roi_7d: number | null
           telegram_chat_id: string | null
-          tg_value_bets: boolean
-          tg_results: boolean
           tg_parlays: boolean
+          tg_results: boolean
+          tg_value_bets: boolean
           tier: Database["public"]["Enums"]["subscription_tier"]
           timezone: string | null
           total_picks: number | null
@@ -756,9 +756,9 @@ export type Database = {
           roi_30d?: number | null
           roi_7d?: number | null
           telegram_chat_id?: string | null
-          tg_value_bets?: boolean
-          tg_results?: boolean
           tg_parlays?: boolean
+          tg_results?: boolean
+          tg_value_bets?: boolean
           tier?: Database["public"]["Enums"]["subscription_tier"]
           timezone?: string | null
           total_picks?: number | null
@@ -777,9 +777,9 @@ export type Database = {
           roi_30d?: number | null
           roi_7d?: number | null
           telegram_chat_id?: string | null
-          tg_value_bets?: boolean
-          tg_results?: boolean
           tg_parlays?: boolean
+          tg_results?: boolean
+          tg_value_bets?: boolean
           tier?: Database["public"]["Enums"]["subscription_tier"]
           timezone?: string | null
           total_picks?: number | null
@@ -887,6 +887,74 @@ export type Database = {
           venue?: string | null
         }
         Relationships: []
+      }
+      tipster_picks: {
+        Row: {
+          created_at: string
+          id: number
+          kickoff: string | null
+          league_label: string | null
+          market: string
+          match_id: number | null
+          match_label: string | null
+          notes: string | null
+          odds: number
+          profit_units: number | null
+          published: boolean
+          reasoning: string | null
+          resolved_at: string | null
+          result: Database["public"]["Enums"]["pick_result"]
+          selection: string
+          stake_units: number | null
+          tipster_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          kickoff?: string | null
+          league_label?: string | null
+          market: string
+          match_id?: number | null
+          match_label?: string | null
+          notes?: string | null
+          odds: number
+          profit_units?: number | null
+          published?: boolean
+          reasoning?: string | null
+          resolved_at?: string | null
+          result?: Database["public"]["Enums"]["pick_result"]
+          selection: string
+          stake_units?: number | null
+          tipster_name?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          kickoff?: string | null
+          league_label?: string | null
+          market?: string
+          match_id?: number | null
+          match_label?: string | null
+          notes?: string | null
+          odds?: number
+          profit_units?: number | null
+          published?: boolean
+          reasoning?: string | null
+          resolved_at?: string | null
+          result?: Database["public"]["Enums"]["pick_result"]
+          selection?: string
+          stake_units?: number | null
+          tipster_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipster_picks_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_parlay_legs: {
         Row: {
@@ -1216,74 +1284,6 @@ export type Database = {
           },
         ]
       }
-      tipster_picks: {
-        Row: {
-          id: number
-          tipster_name: string
-          match_id: number | null
-          match_label: string | null
-          league_label: string | null
-          kickoff: string | null
-          market: string
-          selection: string
-          odds: number
-          stake_units: number | null
-          result: Database["public"]["Enums"]["pick_result"]
-          profit_units: number | null
-          published: boolean
-          reasoning: string | null
-          notes: string | null
-          created_at: string
-          resolved_at: string | null
-        }
-        Insert: {
-          id?: number
-          tipster_name?: string
-          match_id?: number | null
-          match_label?: string | null
-          league_label?: string | null
-          kickoff?: string | null
-          market: string
-          selection: string
-          odds: number
-          stake_units?: number | null
-          result?: Database["public"]["Enums"]["pick_result"]
-          profit_units?: number | null
-          published?: boolean
-          reasoning?: string | null
-          notes?: string | null
-          created_at?: string
-          resolved_at?: string | null
-        }
-        Update: {
-          id?: number
-          tipster_name?: string
-          match_id?: number | null
-          match_label?: string | null
-          league_label?: string | null
-          kickoff?: string | null
-          market?: string
-          selection?: string
-          odds?: number
-          stake_units?: number | null
-          result?: Database["public"]["Enums"]["pick_result"]
-          profit_units?: number | null
-          published?: boolean
-          reasoning?: string | null
-          notes?: string | null
-          created_at?: string
-          resolved_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tipster_picks_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: false
-            referencedRelation: "matches"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       leaderboard: {
@@ -1360,6 +1360,9 @@ export type Database = {
         | "correct_score"
         | "asian_handicap"
         | "draw_no_bet"
+        | "over_under_3_5"
+        | "corners_over_under"
+        | "cards_over_under"
       match_status: "scheduled" | "live" | "finished" | "postponed" | "canceled"
       parlay_status: "pending" | "won" | "lost" | "void" | "partial"
       pick_result: "pending" | "won" | "lost" | "void"
@@ -1959,6 +1962,9 @@ export const Constants = {
         "correct_score",
         "asian_handicap",
         "draw_no_bet",
+        "over_under_3_5",
+        "corners_over_under",
+        "cards_over_under",
       ],
       match_status: ["scheduled", "live", "finished", "postponed", "canceled"],
       parlay_status: ["pending", "won", "lost", "void", "partial"],

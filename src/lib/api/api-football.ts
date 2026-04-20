@@ -123,22 +123,81 @@ const SLUG_TO_ID: Record<string, number> = {
   bet365: 1, pinnacle: 2, "1xbet": 3, marathonbet: 4, betfair: 5,
 };
 
-const MARKET_MAP: Record<string, { market: string; mapValue: (v: string) => string | null }> = {
-  "Match Winner": {
-    market: "1x2",
-    mapValue: (v) => (v === "Home" ? "home" : v === "Draw" ? "draw" : v === "Away" ? "away" : null),
+type OddsMapping = (v: string) => { market: string; selection: string; line: number | null } | null;
+
+/** Parsea valores "Over X.5" / "Under X.5" para cualquier mercado Over/Under. */
+function parseOverUnder(v: string, allowedLines: number[]): { dir: "over" | "under"; lineVal: number } | null {
+  const m = v.match(/^(Over|Under) (\d+\.?\d*)$/);
+  if (!m) return null;
+  const lineVal = parseFloat(m[2]);
+  if (!allowedLines.includes(lineVal)) return null;
+  return { dir: m[1].toLowerCase() as "over" | "under", lineVal };
+}
+
+const MARKET_MAP: Record<string, OddsMapping> = {
+  // ── Resultado 1X2 ──────────────────────────────────────────────────────────
+  "Match Winner": (v) => {
+    const sel = v === "Home" ? "home" : v === "Draw" ? "draw" : v === "Away" ? "away" : null;
+    return sel ? { market: "1x2", selection: sel, line: null } : null;
   },
-  "Goals Over/Under": {
-    market: "over_under_2_5",
-    mapValue: (v) => {
-      if (v === "Over 2.5") return "over";
-      if (v === "Under 2.5") return "under";
-      return null;
-    },
+
+  // ── Goles Over/Under (líneas 1.5, 2.5 y 3.5) ─────────────────────────────
+  "Goals Over/Under": (v) => {
+    const parsed = parseOverUnder(v, [1.5, 2.5, 3.5]);
+    if (!parsed) return null;
+    const marketName = `over_under_${String(parsed.lineVal).replace(".", "_")}`;
+    return { market: marketName, selection: parsed.dir, line: parsed.lineVal };
   },
-  "Both Teams Score": {
-    market: "btts",
-    mapValue: (v) => (v === "Yes" ? "yes" : v === "No" ? "no" : null),
+
+  // ── Ambos marcan ──────────────────────────────────────────────────────────
+  "Both Teams Score": (v) => {
+    const sel = v === "Yes" ? "yes" : v === "No" ? "no" : null;
+    return sel ? { market: "btts", selection: sel, line: null } : null;
+  },
+
+  // ── Doble oportunidad ─────────────────────────────────────────────────────
+  "Double Chance": (v) => {
+    if (v === "Home/Draw") return { market: "double_chance", selection: "1x", line: null };
+    if (v === "Home/Away") return { market: "double_chance", selection: "12", line: null };
+    if (v === "Draw/Away") return { market: "double_chance", selection: "x2", line: null };
+    return null;
+  },
+
+  // ── Córners Over/Under (líneas 8.5, 9.5 y 10.5) ──────────────────────────
+  "Corners Over Under": (v) => {
+    const parsed = parseOverUnder(v, [8.5, 9.5, 10.5]);
+    if (!parsed) return null;
+    return { market: "corners_over_under", selection: parsed.dir, line: parsed.lineVal };
+  },
+  // Alias que algunos bookmakers usan
+  "Total Corners": (v) => {
+    const parsed = parseOverUnder(v, [8.5, 9.5, 10.5]);
+    if (!parsed) return null;
+    return { market: "corners_over_under", selection: parsed.dir, line: parsed.lineVal };
+  },
+
+  // ── Tarjetas amarillas Over/Under (líneas 3.5 y 4.5) ─────────────────────
+  "Cards Over/Under": (v) => {
+    const parsed = parseOverUnder(v, [3.5, 4.5]);
+    if (!parsed) return null;
+    return { market: "cards_over_under", selection: parsed.dir, line: parsed.lineVal };
+  },
+  "Yellow Cards": (v) => {
+    const parsed = parseOverUnder(v, [3.5, 4.5]);
+    if (!parsed) return null;
+    return { market: "cards_over_under", selection: parsed.dir, line: parsed.lineVal };
+  },
+
+  // ── Hándicap asiático (solo líneas X.5 — sin push) ───────────────────────
+  "Asian Handicap": (v) => {
+    // Formato esperado: "Home -1.5", "Away +1.5", "Home +0.5", etc.
+    const m = v.match(/^(Home|Away)\s+([+-]?\d+\.?\d*)$/);
+    if (!m) return null;
+    const side = m[1].toLowerCase() as "home" | "away";
+    const handicap = parseFloat(m[2]);
+    // Solo líneas .5 para evitar push/devolución parcial
+    if (Math.abs(handicap) % 1 !== 0.5) return null;
+    return { market: "asian_handicap", selection: side, line: handicap };
   },
 };
 
@@ -510,22 +569,22 @@ export async function fetchOddsForFixtures(fixtureId: number) {
       if (!bookmakerId) continue;
 
       for (const bet of book.bets) {
-        const cfg = MARKET_MAP[bet.name];
-        if (!cfg) continue;
+        const resolve = MARKET_MAP[bet.name];
+        if (!resolve) continue;
 
         for (const v of bet.values) {
-          const selection = cfg.mapValue(v.value);
-          if (!selection) continue;
+          const mapped = resolve(v.value);
+          if (!mapped) continue;
           const price = parseFloat(v.odd);
           if (isNaN(price) || price <= 1) continue;
 
           out.push({
             match_id: fixtureId,
             bookmaker_id: bookmakerId,
-            market: cfg.market,
-            selection,
+            market: mapped.market,
+            selection: mapped.selection,
             price,
-            line: cfg.market.startsWith("over_under") ? 2.5 : null,
+            line: mapped.line,
             is_live: false,
           });
         }
