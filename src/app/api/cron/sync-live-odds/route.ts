@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
 
         const { data: currentOdds } = await supabase
           .from("odds")
-          .select("id, bookmaker_id, market, selection, price")
+          .select("id, bookmaker_id, market, selection, price, line")
           .eq("match_id", m.id);
 
         if (currentOdds?.length) {
