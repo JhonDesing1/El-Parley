@@ -226,8 +226,8 @@ export async function GET(req: NextRequest) {
         result: "pending" as const,
         // Bets con edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,
-        // Apuesta sugerida: prob. del modelo ≥ 80% y cuota ≥ 1.55
-        is_suggested: modelProb >= 0.80 && o.price >= 1.55,
+        // Apuesta sugerida: prob. del modelo ≥ 65% y cuota ≥ 1.40
+        is_suggested: modelProb >= 0.65 && o.price >= 1.40,
         reasoning: buildReasoning(
           o.market,
           o.selection,

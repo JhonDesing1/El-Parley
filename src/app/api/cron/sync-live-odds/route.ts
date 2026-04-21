@@ -137,6 +137,7 @@ export async function GET(req: NextRequest) {
               confidence: result.confidence,
               result: "pending" as const,
               is_premium: result.edge < 0.06,
+              is_suggested: modelProb >= 0.65 && o.price >= 1.40,
               reasoning: buildReasoning(o.market, o.selection, modelProb, result.impliedProb, result.edge, m.model_expected_goals_home!, m.model_expected_goals_away!),
             });
           }

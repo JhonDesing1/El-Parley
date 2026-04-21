@@ -177,7 +177,7 @@ export default async function PicksPage() {
             Apuestas Sugeridas
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Partidos de hoy · probabilidad ≥ 80% · cuota mínima 1.55
+            Próximos 7 días · probabilidad ≥ 65% · cuota mínima 1.40
           </p>
 
           <div className="space-y-2">
