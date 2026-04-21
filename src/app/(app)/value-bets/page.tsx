@@ -74,7 +74,6 @@ export default async function RecomendadosPage() {
     .gte("match.kickoff" as never, now.toISOString())
     .lte("match.kickoff" as never, in48h.toISOString())
     .in("confidence", ["high", "medium"])
-    .gte("model_prob", isPremium ? 0.85 : 0)
     .order("model_prob", { ascending: false });
 
   if (!isPremium) query = query.eq("is_premium", false);
@@ -92,7 +91,7 @@ export default async function RecomendadosPage() {
     if (!matchMap.has(mid)) matchMap.set(mid, { match: bet.match, bets: [], injuries: 0 });
     matchMap.get(mid)!.bets.push(bet);
   }
-  const matchGroups = [...matchMap.values()].slice(0, isPremium ? 6 : matchMap.size);
+  const matchGroups = [...matchMap.values()].slice(0, isPremium ? matchMap.size : 3);
 
   // Fetch injury counts for these matches
   const matchIds = matchGroups.map((g) => g.match.id);
