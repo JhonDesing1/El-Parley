@@ -47,11 +47,10 @@ export default async function HomePage() {
       .select(betSelect)
       .eq("result", "pending")
       .eq("is_suggested", true)
-      .eq("is_premium", false)
       .order("model_prob", { ascending: false })
       .limit(3),
 
-    // Bets premium: alta confianza (edge ≥ 8% + modelProb ≥ 40%) — bloqueadas (60% acierto)
+    // Bets premium: alta confianza — bloqueadas para suscriptores
     supabase
       .from("value_bets")
       .select(betSelect)
@@ -60,12 +59,11 @@ export default async function HomePage() {
       .order("edge", { ascending: false })
       .limit(3),
 
-    // Top picks de todas las ligas — ordenados por model_prob desc
+    // Top picks de todas las ligas — ordenados por model_prob desc (sin filtro is_premium)
     supabase
       .from("value_bets")
       .select(betSelect)
       .eq("result", "pending")
-      .eq("is_premium", false)
       .order("model_prob", { ascending: false })
       .limit(60),
   ]);
@@ -119,7 +117,7 @@ export default async function HomePage() {
               Las mejores apuestas de hoy
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Selecciones con probabilidad del modelo ≥ 80% y cuota mínima 1.55. Actualizadas cada 10 minutos.
+              Selecciones con probabilidad del modelo ≥ 65% y cuota mínima 1.40. Actualizadas cada 10 minutos.
             </p>
           </header>
 
