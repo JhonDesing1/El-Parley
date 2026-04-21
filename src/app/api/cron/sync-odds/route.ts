@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchOddsForFixtures } from "@/lib/api/api-football";
+import { fetchOddsForFixtures, BOOKMAKER_NAME_TO_SLUG } from "@/lib/api/api-football";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,6 +16,19 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
+
+  // Construir mapa slug → bookmaker_id desde la BD para evitar IDs hardcodeados
+  const { data: bookmakerRows } = await supabase.from("bookmakers").select("id, slug");
+  const slugToId: Record<string, number> = {};
+  for (const b of bookmakerRows ?? []) slugToId[b.slug] = b.id;
+
+  // Verificar que tenemos al menos los bookmakers que devuelve API-Football
+  const knownSlugs = Object.values(BOOKMAKER_NAME_TO_SLUG);
+  const missingSlugs = knownSlugs.filter((s) => !slugToId[s]);
+  if (missingSlugs.length > 0) {
+    console.warn(`[sync-odds] Bookmakers faltantes en BD: ${missingSlugs.join(", ")}. Aplica migración 00014.`);
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
@@ -39,7 +52,7 @@ export async function GET(req: NextRequest) {
     const batch = matches.slice(i, i + 10);
     const results = await Promise.allSettled(
       batch.map(async (m) => {
-        const odds = await fetchOddsForFixtures(m.id);
+        const odds = await fetchOddsForFixtures(m.id, slugToId);
         if (!odds.length) return 0;
 
         // Upsert en bulk

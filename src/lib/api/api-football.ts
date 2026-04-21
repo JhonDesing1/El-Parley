@@ -109,18 +109,14 @@ function mapStatus(short: string): "scheduled" | "live" | "finished" | "postpone
 }
 
 // Mapeo de nombres de API-Football → slug interno.
-// API-Football (free tier) retorna casas internacionales, no colombianas.
-// Los slugs deben coincidir con los IDs insertados en public.bookmakers.
-const BOOKMAKER_NAME_TO_SLUG: Record<string, string> = {
+// API-Football retorna casas internacionales; los slugs deben coincidir
+// con los valores insertados en public.bookmakers.
+export const BOOKMAKER_NAME_TO_SLUG: Record<string, string> = {
   "Bet365":      "bet365",
   "Pinnacle":    "pinnacle",
   "1xBet":       "1xbet",
   "Marathonbet": "marathonbet",
   "Betfair":     "betfair",
-};
-
-const SLUG_TO_ID: Record<string, number> = {
-  bet365: 1, pinnacle: 2, "1xbet": 3, marathonbet: 4, betfair: 5,
 };
 
 type OddsMapping = (v: string) => { market: string; selection: string; line: number | null } | null;
@@ -556,7 +552,15 @@ export async function fetchLineupsForFixture(
   }
 }
 
-export async function fetchOddsForFixtures(fixtureId: number) {
+/**
+ * slugToId: mapa de slug → bookmaker_id obtenido desde la tabla public.bookmakers.
+ * Pasar siempre este parámetro para evitar que los IDs queden hardcodeados
+ * y desincronizados con la base de datos.
+ */
+export async function fetchOddsForFixtures(
+  fixtureId: number,
+  slugToId: Record<string, number>,
+) {
   const response = await af<AfOddsResponse[]>("/odds", { fixture: fixtureId });
   if (!response.length) return [];
 
@@ -565,7 +569,7 @@ export async function fetchOddsForFixtures(fixtureId: number) {
     for (const book of entry.bookmakers) {
       const slug = BOOKMAKER_NAME_TO_SLUG[book.name];
       if (!slug) continue;
-      const bookmakerId = SLUG_TO_ID[slug];
+      const bookmakerId = slugToId[slug];
       if (!bookmakerId) continue;
 
       for (const bet of book.bets) {

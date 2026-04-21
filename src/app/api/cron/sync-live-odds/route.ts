@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchOddsForFixtures } from "@/lib/api/api-football";
-import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
+import { fetchOddsForFixtures, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
 import { notifyAdminError } from "@/lib/telegram/send";
@@ -55,6 +54,12 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createAdminClient();
+
+  // Mapa slug → bookmaker_id desde la BD (evita IDs hardcodeados)
+  const { data: bookmakerRows } = await supabase.from("bookmakers").select("id, slug");
+  const slugToId: Record<string, number> = {};
+  for (const b of bookmakerRows ?? []) slugToId[b.slug] = b.id;
+
   const now = new Date();
   const in2h = new Date(now.getTime() + 2 * 3600 * 1000);
 
@@ -86,7 +91,7 @@ export async function GET(req: NextRequest) {
   const results = await Promise.allSettled(
     hotMatches.map(async (m) => {
       // ── 1. Fetch + upsert latest odds ───────────────────────────
-      const odds = await fetchOddsForFixtures(m.id);
+      const odds = await fetchOddsForFixtures(m.id, slugToId);
       if (odds.length) {
         const { error: upErr } = await supabase.from("odds").upsert(odds, {
           onConflict: "match_id,bookmaker_id,market,selection,line",
