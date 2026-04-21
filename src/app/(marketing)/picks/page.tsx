@@ -78,6 +78,7 @@ export default async function PicksPage() {
 
     // Top value_bets por model_prob — sin depender del flag is_suggested.
     // Traemos 200 para deduplicar por partido en cliente.
+    // No filtramos is_premium: mostramos los más probables sin restricción.
     supabase
       .from("value_bets")
       .select(`
@@ -91,7 +92,6 @@ export default async function PicksPage() {
         )
       `)
       .eq("result", "pending")
-      .eq("is_premium", false)
       .order("model_prob", { ascending: false })
       .limit(200),
 
