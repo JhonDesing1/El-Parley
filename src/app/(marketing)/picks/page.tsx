@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Target, TrendingUp, Trophy, Clock, Zap, Layers } from "lucide-react";
+import { Target, Clock, Zap, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Metadata } from "next";
@@ -54,30 +54,27 @@ const SELECTION_LABELS: Record<string, string> = {
 export default async function PicksPage() {
   const supabase = (await createClient()) as any;
 
-  // Start of today UTC
-  const now = new Date();
-  const todayUTC = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  ).toISOString();
+  // Solo partidos futuros (kickoff >= ahora)
+  const nowISO = new Date().toISOString();
 
-  // Start of tomorrow UTC (to bound today's kickoffs)
-  const tomorrowUTC = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
-  ).toISOString();
+  // Ventana: próximos 7 días
+  const in7d = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
 
   const [
     { data: tipsterPicks },
     { data: suggestedBets },
-    { data: todayParlays },
+    { data: upcomingParlays },
   ] = await Promise.all([
-    // Manual tipster picks (published, last 50)
+    // Solo picks pendientes con partido próximo
     supabase
       .from("tipster_picks")
       .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50),
+      .eq("result", "pending")
+      .gte("kickoff", nowISO)
+      .order("kickoff", { ascending: true })
+      .limit(20),
 
-    // Apuestas sugeridas: solo pending con partido hoy (model_prob >= 80% via is_suggested)
+    // Apuestas sugeridas: pending con partido en los próximos 7 días
     supabase
       .from("value_bets")
       .select(`
@@ -94,7 +91,7 @@ export default async function PicksPage() {
       .order("model_prob", { ascending: false })
       .limit(50),
 
-    // Today's free parlays with legs
+    // Combinadas pendientes con partidos en los próximos 7 días
     supabase
       .from("parlays")
       .select(`
@@ -110,46 +107,37 @@ export default async function PicksPage() {
         )
       `)
       .eq("tier", "free")
-      .gte("created_at", todayUTC)
+      .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(4),
   ]);
 
   const allPicks = (tipsterPicks ?? []) as any[];
   const suggested = (suggestedBets ?? []) as any[];
-  const parlays = (todayParlays ?? []) as any[];
+  const rawParlays = (upcomingParlays ?? []) as any[];
 
-  // Sort parlay legs by leg_order
-  for (const p of parlays) {
-    if (Array.isArray(p.parlay_legs)) {
-      p.parlay_legs.sort((a: any, b: any) => a.leg_order - b.leg_order);
-    }
-  }
-
-  // Tipster stats (usa todos los picks para el historial)
-  const resolved = allPicks.filter((p) => p.result !== "pending" && p.result !== "void");
-  const won = resolved.filter((p) => p.result === "won").length;
-  const winRate = resolved.length > 0 ? Math.round((won / resolved.length) * 100) : null;
-  const totalUnits = allPicks.reduce((s: number, p: any) => s + (Number(p.profit_units) || 0), 0);
-
-  // Solo picks activos con partido HOY, máximo 3
-  const pendingPicks = allPicks
-    .filter((p) => {
-      if (p.result !== "pending") return false;
-      const kickoff = p.kickoff;
-      if (!kickoff) return false;
-      return kickoff >= todayUTC && kickoff < tomorrowUTC;
+  // Sort parlay legs by leg_order and filter out parlays with all legs in the past
+  const parlays = rawParlays
+    .map((p: any) => {
+      if (Array.isArray(p.parlay_legs)) {
+        p.parlay_legs.sort((a: any, b: any) => a.leg_order - b.leg_order);
+      }
+      return p;
     })
-    .slice(0, 3);
+    .filter((p: any) => {
+      const legs: any[] = p.parlay_legs ?? [];
+      return legs.some((l) => l.match?.kickoff && l.match.kickoff >= nowISO);
+    });
 
-  const historicalPicks = allPicks.filter((p) => p.result !== "pending");
+  // Solo picks pendientes con partido próximo (ya filtrado en la query)
+  const pendingPicks = allPicks.slice(0, 3);
 
-  // Apuestas sugeridas con partido HOY, prob >= 80% (ya filtrado por is_suggested), máximo 3
+  // Apuestas sugeridas con partido próximo (kickoff >= ahora), máximo 3
   const pendingSuggested = suggested
     .filter((b) => {
       const kickoff = b.match?.kickoff;
       if (!kickoff) return false;
-      return kickoff >= todayUTC && kickoff < tomorrowUTC;
+      return kickoff >= nowISO && kickoff <= in7d;
     })
     .slice(0, 3);
 
@@ -165,37 +153,6 @@ export default async function PicksPage() {
           Apuestas sugeridas, combinadas y picks con análisis estadístico
         </p>
       </div>
-
-      {/* Tipster stats */}
-      {resolved.length > 0 && (
-        <div className="mb-8 grid grid-cols-3 gap-3">
-          <StatCard
-            icon={<Trophy className="h-4 w-4" />}
-            label="Acierto histórico"
-            value={winRate !== null ? `${winRate}%` : "—"}
-            valueClass={
-              winRate === null
-                ? "text-muted-foreground"
-                : winRate >= 55
-                  ? "text-emerald-400"
-                  : winRate >= 45
-                    ? "text-foreground"
-                    : "text-red-400"
-            }
-          />
-          <StatCard
-            icon={<TrendingUp className="h-4 w-4" />}
-            label="Unidades totales"
-            value={`${totalUnits > 0 ? "+" : ""}${totalUnits.toFixed(2)}u`}
-            valueClass={totalUnits >= 0 ? "text-emerald-400" : "text-red-400"}
-          />
-          <StatCard
-            icon={<Target className="h-4 w-4" />}
-            label="Picks resueltos"
-            value={String(resolved.length)}
-          />
-        </div>
-      )}
 
       {/* ── Combinadas del día ──────────────────────────────────────── */}
       {parlays.length > 0 && (
@@ -241,19 +198,6 @@ export default async function PicksPage() {
           <div className="space-y-3">
             {pendingPicks.map((pick) => (
               <PickCard key={pick.id} pick={pick} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {historicalPicks.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Historial de picks
-          </h2>
-          <div className="space-y-2">
-            {historicalPicks.map((pick) => (
-              <PickCard key={pick.id} pick={pick} compact />
             ))}
           </div>
         </section>
@@ -470,24 +414,3 @@ function PickCard({ pick, compact = false }: { pick: any; compact?: boolean }) {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  valueClass = "text-foreground",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  valueClass?: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="mb-1 flex items-center gap-1.5 text-muted-foreground">
-        {icon}
-        <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
-      </div>
-      <p className={`font-mono text-xl font-bold tabular-nums ${valueClass}`}>{value}</p>
-    </Card>
-  );
-}

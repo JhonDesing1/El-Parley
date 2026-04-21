@@ -256,11 +256,17 @@ export default async function HomePage() {
           </p>
         </header>
 
-        {(() => {
-          const displayLeagues = betsByLeague.length > 0 ? betsByLeague : getDemoLeaguePicks();
-          return (
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-              {displayLeagues.map(({ leagueMeta, bets }) => (
+        {betsByLeague.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Trophy className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <h3 className="font-display text-xl font-bold">Sin picks disponibles</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Los picks se actualizan automáticamente cada 10 minutos con datos de API-Football.
+            </p>
+          </Card>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {betsByLeague.map(({ leagueMeta, bets }) => (
                 <div key={leagueMeta?.id ?? Math.random()} className="flex flex-col gap-3">
                   {/* League header */}
                   <div className="flex items-center gap-2 border-b border-border/40 pb-3">
@@ -298,9 +304,8 @@ export default async function HomePage() {
                   ))}
                 </div>
               ))}
-            </div>
-          );
-        })()}
+          </div>
+        )}
       </section>
 
       <section className="container py-12">
@@ -363,48 +368,6 @@ export default async function HomePage() {
   );
 }
 
-function getDemoLeaguePicks() {
-  const d = (hoursFromNow: number) =>
-    new Date(Date.now() + hoursFromNow * 3_600_000).toISOString();
-  return [
-    {
-      leagueMeta: { id: 9001, name: "Premier League", country: "England", logo_url: null, flag_url: null },
-      bets: [
-        { id: "d1", match_id: "d1", market: "1x2", selection: "home", line: null, price: 1.85, edge: 0.072, model_prob: 0.61, confidence: "high", bookmaker: { slug: "", name: "Bet365", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(3), home_team: { name: "Arsenal" }, away_team: { name: "Chelsea" }, league: {} } },
-        { id: "d2", match_id: "d2", market: "over_under_2_5", selection: "over", line: null, price: 1.72, edge: 0.055, model_prob: 0.58, confidence: "medium", bookmaker: { slug: "", name: "Betway", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(5), home_team: { name: "Man City" }, away_team: { name: "Liverpool" }, league: {} } },
-        { id: "d3", match_id: "d3", market: "btts", selection: "yes", line: null, price: 1.65, edge: 0.048, model_prob: 0.64, confidence: "medium", bookmaker: { slug: "", name: "Betway", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(7), home_team: { name: "Tottenham" }, away_team: { name: "Man Utd" }, league: {} } },
-        { id: "d4", match_id: "d4", market: "double_chance", selection: "12", line: null, price: 1.28, edge: 0.038, model_prob: 0.82, confidence: "high", bookmaker: { slug: "", name: "Bet365", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(9), home_team: { name: "Newcastle" }, away_team: { name: "Aston Villa" }, league: {} } },
-      ],
-    },
-    {
-      leagueMeta: { id: 9002, name: "La Liga", country: "Spain", logo_url: null, flag_url: null },
-      bets: [
-        { id: "d5", match_id: "d5", market: "1x2", selection: "home", line: null, price: 1.75, edge: 0.063, model_prob: 0.59, confidence: "high", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(4), home_team: { name: "Real Madrid" }, away_team: { name: "Atlético" }, league: {} } },
-        { id: "d6", match_id: "d6", market: "over_under_2_5", selection: "over", line: null, price: 1.68, edge: 0.051, model_prob: 0.62, confidence: "medium", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(6), home_team: { name: "Barcelona" }, away_team: { name: "Sevilla" }, league: {} } },
-        { id: "d7", match_id: "d7", market: "1x2", selection: "away", line: null, price: 2.10, edge: 0.078, model_prob: 0.50, confidence: "medium", bookmaker: { slug: "", name: "Betway", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(8), home_team: { name: "Valencia" }, away_team: { name: "Villarreal" }, league: {} } },
-        { id: "d8", match_id: "d8", market: "btts", selection: "yes", line: null, price: 1.70, edge: 0.044, model_prob: 0.60, confidence: "medium", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(10), home_team: { name: "Betis" }, away_team: { name: "Athletic" }, league: {} } },
-      ],
-    },
-    {
-      leagueMeta: { id: 9003, name: "Bundesliga", country: "Germany", logo_url: null, flag_url: null },
-      bets: [
-        { id: "d9", match_id: "d9", market: "1x2", selection: "home", line: null, price: 1.60, edge: 0.058, model_prob: 0.65, confidence: "high", bookmaker: { slug: "", name: "Bet365", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(2), home_team: { name: "Bayern Munich" }, away_team: { name: "Dortmund" }, league: {} } },
-        { id: "d10", match_id: "d10", market: "over_under_2_5", selection: "over", line: null, price: 1.55, edge: 0.042, model_prob: 0.70, confidence: "high", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(4), home_team: { name: "Leverkusen" }, away_team: { name: "Leipzig" }, league: {} } },
-        { id: "d11", match_id: "d11", market: "btts", selection: "yes", line: null, price: 1.62, edge: 0.049, model_prob: 0.63, confidence: "medium", bookmaker: { slug: "", name: "Bet365", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(6), home_team: { name: "Frankfurt" }, away_team: { name: "Stuttgart" }, league: {} } },
-        { id: "d12", match_id: "d12", market: "double_chance", selection: "1x", line: null, price: 1.35, edge: 0.035, model_prob: 0.78, confidence: "high", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(8), home_team: { name: "Mönchengladbach" }, away_team: { name: "Mainz" }, league: {} } },
-      ],
-    },
-    {
-      leagueMeta: { id: 9004, name: "Serie A", country: "Italy", logo_url: null, flag_url: null },
-      bets: [
-        { id: "d13", match_id: "d13", market: "1x2", selection: "home", line: null, price: 1.90, edge: 0.067, model_prob: 0.57, confidence: "high", bookmaker: { slug: "", name: "Betway", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(3), home_team: { name: "Inter Milan" }, away_team: { name: "AC Milan" }, league: {} } },
-        { id: "d14", match_id: "d14", market: "over_under_2_5", selection: "over", line: null, price: 1.78, edge: 0.059, model_prob: 0.60, confidence: "medium", bookmaker: { slug: "", name: "Bet365", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(5), home_team: { name: "Juventus" }, away_team: { name: "Napoli" }, league: {} } },
-        { id: "d15", match_id: "d15", market: "1x2", selection: "away", line: null, price: 2.20, edge: 0.082, model_prob: 0.48, confidence: "medium", bookmaker: { slug: "", name: "Bwin", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(7), home_team: { name: "Roma" }, away_team: { name: "Lazio" }, league: {} } },
-        { id: "d16", match_id: "d16", market: "btts", selection: "yes", line: null, price: 1.67, edge: 0.046, model_prob: 0.61, confidence: "medium", bookmaker: { slug: "", name: "Betway", logo_url: null, affiliate_url: "#" }, match: { kickoff: d(9), home_team: { name: "Atalanta" }, away_team: { name: "Fiorentina" }, league: {} } },
-      ],
-    },
-  ];
-}
 
 const SELECTION_LABEL: Record<string, string> = {
   home: "Local", draw: "Empate", away: "Visitante",
