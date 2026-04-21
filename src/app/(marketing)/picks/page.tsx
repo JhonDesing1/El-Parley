@@ -6,6 +6,8 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Picks del día — El Parley",
   description:
@@ -30,12 +32,15 @@ const RESULT_LABELS: Record<string, string> = {
 const MARKET_LABELS: Record<string, string> = {
   "1x2":              "1X2",
   btts:               "Ambos anotan",
-  over_under_2_5:     "+/- 2.5",
   over_under_1_5:     "+/- 1.5",
+  over_under_2_5:     "+/- 2.5",
+  over_under_3_5:     "+/- 3.5",
   double_chance:      "Doble oportunidad",
   correct_score:      "Resultado exacto",
   asian_handicap:     "Hándicap asiático",
   draw_no_bet:        "Empate no apuesta",
+  corners_over_under: "Córners",
+  cards_over_under:   "Tarjetas",
 };
 
 const SELECTION_LABELS: Record<string, string> = {
@@ -54,18 +59,15 @@ const SELECTION_LABELS: Record<string, string> = {
 export default async function PicksPage() {
   const supabase = (await createClient()) as any;
 
-  // Solo partidos futuros (kickoff >= ahora)
   const nowISO = new Date().toISOString();
-
-  // Ventana: próximos 7 días
   const in7d = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
 
   const [
     { data: tipsterPicks },
-    { data: suggestedBets },
+    { data: topBets },
     { data: upcomingParlays },
   ] = await Promise.all([
-    // Solo picks pendientes con partido próximo
+    // Picks del tipster pendientes con partido próximo
     supabase
       .from("tipster_picks")
       .select("*")
@@ -74,11 +76,13 @@ export default async function PicksPage() {
       .order("kickoff", { ascending: true })
       .limit(20),
 
-    // Apuestas sugeridas: pending con partido en los próximos 7 días
+    // Top value_bets por model_prob — sin depender del flag is_suggested.
+    // Traemos 200 para deduplicar por partido en cliente.
     supabase
       .from("value_bets")
       .select(`
-        id, market, selection, price, model_prob, edge, result, reasoning, detected_at,
+        id, market, selection, line, price, model_prob, edge, result, reasoning,
+        match_id,
         match:matches(
           kickoff,
           home_team:teams!home_team_id(name),
@@ -86,12 +90,12 @@ export default async function PicksPage() {
           league:leagues(name)
         )
       `)
-      .eq("is_suggested", true)
       .eq("result", "pending")
+      .eq("is_premium", false)
       .order("model_prob", { ascending: false })
-      .limit(50),
+      .limit(200),
 
-    // Combinadas pendientes con partidos en los próximos 7 días
+    // Combinadas libres pendientes
     supabase
       .from("parlays")
       .select(`
@@ -113,10 +117,26 @@ export default async function PicksPage() {
   ]);
 
   const allPicks = (tipsterPicks ?? []) as any[];
-  const suggested = (suggestedBets ?? []) as any[];
+  const rawBets  = (topBets ?? []) as any[];
   const rawParlays = (upcomingParlays ?? []) as any[];
 
-  // Sort parlay legs by leg_order and filter out parlays with all legs in the past
+  // Deduplicar por partido: 1 pick por partido (el de mayor model_prob),
+  // solo partidos futuros dentro de los próximos 7 días.
+  const seenMatches = new Set<number>();
+  const pendingSuggested: any[] = [];
+  for (const b of rawBets) {
+    const kickoff = b.match?.kickoff;
+    if (!kickoff || kickoff < nowISO || kickoff > in7d) continue;
+    if (seenMatches.has(b.match_id)) continue;
+    seenMatches.add(b.match_id);
+    pendingSuggested.push(b);
+    if (pendingSuggested.length >= 6) break;
+  }
+
+  // Picks del tipster (ya filtrados en la query)
+  const pendingPicks = allPicks.slice(0, 3);
+
+  // Combinadas: ordenar piernas y excluir las con todas las piernas pasadas
   const parlays = rawParlays
     .map((p: any) => {
       if (Array.isArray(p.parlay_legs)) {
@@ -124,22 +144,11 @@ export default async function PicksPage() {
       }
       return p;
     })
-    .filter((p: any) => {
-      const legs: any[] = p.parlay_legs ?? [];
-      return legs.some((l) => l.match?.kickoff && l.match.kickoff >= nowISO);
-    });
-
-  // Solo picks pendientes con partido próximo (ya filtrado en la query)
-  const pendingPicks = allPicks.slice(0, 3);
-
-  // Apuestas sugeridas con partido próximo (kickoff >= ahora), máximo 3
-  const pendingSuggested = suggested
-    .filter((b) => {
-      const kickoff = b.match?.kickoff;
-      if (!kickoff) return false;
-      return kickoff >= nowISO && kickoff <= in7d;
-    })
-    .slice(0, 3);
+    .filter((p: any) =>
+      (p.parlay_legs ?? []).some(
+        (l: any) => l.match?.kickoff && l.match.kickoff >= nowISO,
+      ),
+    );
 
   return (
     <div className="container max-w-3xl py-10">
@@ -177,7 +186,7 @@ export default async function PicksPage() {
             Apuestas Sugeridas
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Próximos 7 días · probabilidad ≥ 65% · cuota mínima 1.40
+            Próximos 7 días · ordenadas por mayor probabilidad del modelo
           </p>
 
           <div className="space-y-2">
