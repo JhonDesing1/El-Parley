@@ -6,14 +6,43 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
-import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Zap, Globe } from "lucide-react";
+import { isPremiumUser, getCurrentUser } from "@/lib/utils/auth";
+import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
+import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Zap, Globe, Crown } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+const TOP_LEAGUE_SET = new Set<number>(HIGH_PRIORITY_LEAGUE_IDS);
+
+/** Ordena apuestas priorizando ligas top del mundo, luego probabilidad del modelo. */
+function sortByTopLeaguesAndProb<T extends { match?: { league?: { id?: number | null } | null } | null; model_prob?: number | null }>(bets: T[]): T[] {
+  return [...bets].sort((a, b) => {
+    const aTop = TOP_LEAGUE_SET.has(a.match?.league?.id ?? -1) ? 1 : 0;
+    const bTop = TOP_LEAGUE_SET.has(b.match?.league?.id ?? -1) ? 1 : 0;
+    if (aTop !== bTop) return bTop - aTop;
+    return (b.model_prob ?? 0) - (a.model_prob ?? 0);
+  });
+}
+
+/** Deduplica apuestas por match_id, manteniendo la primera (asume entrada ya ordenada). */
+function dedupeByMatch<T extends { match_id: number }>(bets: T[], max: number): T[] {
+  const seen = new Set<number>();
+  const out: T[] = [];
+  for (const vb of bets) {
+    if (seen.has(vb.match_id)) continue;
+    seen.add(vb.match_id);
+    out.push(vb);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 export default async function HomePage() {
   const supabase = await createClient();
+  const user = await getCurrentUser();
+  const isPremium = user ? await isPremiumUser() : false;
 
   const now = new Date().toISOString();
   const in48h = new Date(new Date().getTime() + 48 * 3600 * 1000).toISOString();
@@ -42,13 +71,14 @@ export default async function HomePage() {
       .limit(12),
 
     // Apuestas sugeridas del día (is_suggested = true) — visibles para todos
+    // Cargamos 20 para poder deduplicar por partido y priorizar ligas top.
     supabase
       .from("value_bets")
       .select(betSelect)
       .eq("result", "pending")
       .eq("is_suggested", true)
       .order("model_prob", { ascending: false })
-      .limit(3),
+      .limit(20),
 
     // Bets premium: alta confianza — bloqueadas para suscriptores
     supabase
@@ -57,7 +87,7 @@ export default async function HomePage() {
       .eq("result", "pending")
       .eq("is_premium", true)
       .order("edge", { ascending: false })
-      .limit(3),
+      .limit(20),
 
     // Top picks de todas las ligas — ordenados por model_prob desc (sin filtro is_premium)
     supabase
@@ -65,10 +95,19 @@ export default async function HomePage() {
       .select(betSelect)
       .eq("result", "pending")
       .order("model_prob", { ascending: false })
-      .limit(60),
+      .limit(80),
   ]);
 
-  const allBets = [...(freeBetsRaw ?? []), ...(premiumBetsRaw ?? [])];
+  // Free: máx 2 apuestas sugeridas, de partidos diferentes, priorizando ligas top
+  const freeValueBets = dedupeByMatch(sortByTopLeaguesAndProb(freeBetsRaw ?? []), 2);
+
+  // Premium: 3 apuestas extra para usuarios premium — también de partidos diferentes
+  // y que NO coincidan con las 2 gratuitas para no repetir.
+  const freeMatchIds = new Set(freeValueBets.map((vb: any) => vb.match_id));
+  const premiumPool = (premiumBetsRaw ?? []).filter((vb: any) => !freeMatchIds.has(vb.match_id));
+  const premiumTeasers = dedupeByMatch(sortByTopLeaguesAndProb(premiumPool), 3);
+
+  const allBets = [...freeValueBets, ...premiumTeasers];
   const matchIdsWithValue = new Set(allBets.map((vb: any) => vb.match_id));
 
   const matches = (matchesRaw ?? []).map((m: any) => ({
@@ -84,13 +123,12 @@ export default async function HomePage() {
     has_value_bet: matchIdsWithValue.has(m.id),
   }));
 
-  const freeValueBets = freeBetsRaw ?? [];
-  const premiumTeasers = premiumBetsRaw ?? [];
   const hasAnyBets = freeValueBets.length > 0 || premiumTeasers.length > 0;
 
-  // Agrupa los picks por liga, mostrando hasta 4 picks por liga y hasta 4 ligas
+  // Agrupa apuestas por liga (solo ligas top), mostrando hasta 4 por liga y hasta 4 ligas
+  const sortedLeagueBets = sortByTopLeaguesAndProb((topLeagueBetsRaw ?? []) as any[]);
   const leagueMap = new Map<number, { leagueMeta: any; bets: any[] }>();
-  for (const vb of (topLeagueBetsRaw ?? []) as any[]) {
+  for (const vb of sortedLeagueBets) {
     const leagueId = vb.match?.league?.id;
     if (!leagueId) continue;
     if (!leagueMap.has(leagueId)) {
@@ -117,21 +155,22 @@ export default async function HomePage() {
               Las mejores apuestas de hoy
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Selecciones con probabilidad del modelo ≥ 65% y cuota mínima 1.40. Actualizadas cada 10 minutos.
+              Datos reales de API-Football · cuotas reales de casas de apuestas · modelo Poisson + xG.
+              Priorizamos las principales ligas del mundo.
             </p>
           </header>
 
-          {/* ── BETS GRATUITAS ── */}
+          {/* ── BETS GRATUITAS (2) ── */}
           {freeValueBets.length > 0 && (
             <div className="mb-10">
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Apuestas sugeridas</span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
                   <Target className="h-3 w-3 text-amber-400" />
-                  0.55 cuotas acertadas
+                  2 selecciones · partidos distintos
                 </span>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 {freeValueBets.map((vb: any) => (
                   <ValueBetAlert
                     key={vb.id}
@@ -144,96 +183,99 @@ export default async function HomePage() {
             </div>
           )}
 
-          {/* ── BANNER PREMIUM ── */}
+          {/* ── SECCIÓN PREMIUM ── */}
           {premiumTeasers.length > 0 && (
             <>
-              <div className="relative mb-6 overflow-hidden rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/15 via-card to-card p-8">
-                {/* Glow de fondo */}
-                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-8 left-1/3 h-40 w-40 rounded-full bg-value/15 blur-2xl" />
+              {isPremium ? (
+                // Usuario premium: mostrar cards desbloqueadas, sin banner "Ver planes"
+                <>
+                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+                      <Crown className="h-3 w-3" />
+                      Tus apuestas Premium
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+                      <ShieldCheck className="h-3 w-3" />
+                      3 selecciones adicionales
+                    </span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {premiumTeasers.map((vb: any) => (
+                      <ValueBetAlert
+                        key={vb.id}
+                        valueBet={vb}
+                        matchId={vb.match_id}
+                        match={vb.match}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                // Usuario gratis: banner + cards bloqueadas
+                <>
+                  <div className="relative mb-6 overflow-hidden rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/15 via-card to-card p-8">
+                    <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+                    <div className="pointer-events-none absolute -bottom-8 left-1/3 h-40 w-40 rounded-full bg-value/15 blur-2xl" />
 
-                <div className="relative grid gap-6 md:grid-cols-2 md:items-center">
-                  <div>
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
-                      <Zap className="h-3 w-3" />
-                      Premium — Alta confianza
-                    </div>
-                    <h3 className="font-display text-2xl font-bold tracking-tight md:text-3xl">
-                      Los picks que{" "}
-                      <span className="bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">
-                        realmente mueven la aguja
-                      </span>
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Los apostadores que van en serio no apuestan a lo que todo el mundo ve.
-                      Nuestras selecciones de alta confianza tienen edge ≥8% — las casas no las ven venir.
-                    </p>
+                    <div className="relative grid gap-6 md:grid-cols-2 md:items-center">
+                      <div>
+                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+                          <Zap className="h-3 w-3" />
+                          Premium — 3 apuestas extra
+                        </div>
+                        <h3 className="font-display text-2xl font-bold tracking-tight md:text-3xl">
+                          Desbloquea{" "}
+                          <span className="bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">
+                            3 apuestas adicionales
+                          </span>
+                        </h3>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                          Con Premium accedes a 3 selecciones extra cada día —
+                          mismos criterios que las gratuitas: datos reales de API-Football,
+                          cuotas reales de casas y prioridad a ligas top del mundo.
+                        </p>
 
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                        <span className="font-bold text-emerald-400">0.60</span>
-                        <span className="text-muted-foreground">cuotas acertadas</span>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                            <span className="font-bold text-emerald-400">Edge ≥8%</span>
+                            <span className="text-muted-foreground">por selección</span>
+                          </div>
+                          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+                            <Zap className="h-3.5 w-3.5 text-amber-400" />
+                            <span className="text-muted-foreground">Alertas Telegram en tiempo real</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs">
-                        <Target className="h-3.5 w-3.5 text-primary" />
-                        <span className="font-bold text-primary">Edge ≥8%</span>
-                        <span className="text-muted-foreground">por selección</span>
-                      </div>
-                      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
-                        <Zap className="h-3.5 w-3.5 text-amber-400" />
-                        <span className="text-muted-foreground">Alertas Telegram en tiempo real</span>
+
+                      <div className="flex flex-col items-start gap-3 md:items-end">
+                        <Button asChild size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 md:max-w-xs">
+                          <Link href="/premium">
+                            Ver planes Premium
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <p className="text-center text-[10px] text-muted-foreground md:text-right">
+                          Desde $10.000 COP/mes · Cancela cuando quieras
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-start gap-3 md:items-end">
-                    <div className="w-full rounded-xl border border-primary/20 bg-background/60 p-4 backdrop-blur-sm md:max-w-xs">
-                      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Diferencia real</div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="text-center">
-                          <div className="font-mono text-2xl font-bold text-muted-foreground">0.55</div>
-                          <div className="text-[10px] text-muted-foreground">Plan Gratis</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="font-mono text-2xl font-bold text-emerald-400">0.60</div>
-                          <div className="text-[10px] font-semibold text-primary">Premium</div>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-center text-[10px] text-muted-foreground">
-                        0.05 extra en cuotas acertadas = ROI hasta 3× mayor a largo plazo
-                      </div>
-                    </div>
-                    <Button asChild size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 md:max-w-xs">
-                      <Link href="/premium">
-                        Ver planes Premium
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <p className="text-center text-[10px] text-muted-foreground md:text-right">
-                      Desde $10.000 COP/mes · Cancela cuando quieras
-                    </p>
+                  <div className="mb-3 flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Apuestas premium</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+                      <Lock className="h-3 w-3" />
+                      Solo para suscriptores
+                    </span>
                   </div>
-                </div>
-              </div>
-
-              {/* Cards premium bloqueadas */}
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Picks premium</span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary">
-                  <ShieldCheck className="h-3 w-3" />
-                  0.60 cuotas acertadas · Alta confianza
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-                  <Lock className="h-3 w-3" />
-                  Solo para suscriptores
-                </span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {premiumTeasers.map((vb: any) => (
-                  <LockedValueBetCard key={vb.id} match={vb.match} />
-                ))}
-              </div>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {premiumTeasers.map((vb: any) => (
+                      <LockedValueBetCard key={vb.id} match={vb.match} />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
         </section>
@@ -244,22 +286,22 @@ export default async function HomePage() {
         <header className="mb-8">
           <Badge variant="outline" className="mb-2 border-border bg-muted/60 text-muted-foreground">
             <Globe className="mr-1 h-3 w-3" />
-            PICKS POR LIGA
+            APUESTAS POR LIGA
           </Badge>
           <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
             Cuotas con mayor probabilidad de acierto
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Los picks mejor valorados por nuestro modelo — resultados, goles, doble oportunidad y más, de todas las ligas disponibles.
+            Las apuestas mejor valoradas por nuestro modelo — resultados, goles, doble oportunidad y más, priorizando las principales ligas del mundo.
           </p>
         </header>
 
         {betsByLeague.length === 0 ? (
           <Card className="p-12 text-center">
             <Trophy className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-            <h3 className="font-display text-xl font-bold">Sin picks disponibles</h3>
+            <h3 className="font-display text-xl font-bold">Sin apuestas disponibles</h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-              Los picks se actualizan automáticamente cada 10 minutos con datos de API-Football.
+              Las apuestas se actualizan automáticamente cada 10 minutos con datos de API-Football.
             </p>
           </Card>
         ) : (
@@ -293,7 +335,7 @@ export default async function HomePage() {
                     )}
                     <span className="font-display font-bold truncate">{leagueMeta?.name ?? "Liga"}</span>
                     <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
-                      {bets.length} pick{bets.length > 1 ? "s" : ""}
+                      {bets.length} apuesta{bets.length > 1 ? "s" : ""}
                     </Badge>
                   </div>
 

@@ -1,4 +1,4 @@
-import { Sparkles, TrendingUp, Target, Lock } from "lucide-react";
+import { Sparkles, TrendingUp, Target, Lock, Gauge } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,22 @@ function edgeBadgeClass(edge: number) {
   return "bg-amber-500/15 text-amber-400 border-amber-500/25";
 }
 
+export function probabilityBucket(modelProb: number): { label: "Alta" | "Media" | "Baja"; className: string } {
+  if (modelProb >= 0.75) return { label: "Alta", className: "text-emerald-400" };
+  if (modelProb >= 0.6) return { label: "Media", className: "text-amber-400" };
+  return { label: "Baja", className: "text-red-400" };
+}
+
+/**
+ * Confianza 0-100 derivada del modelo. Combina probabilidad y edge
+ * para reflejar qué tan fuerte es la apuesta. Cap a 99 para evitar 100% absolutos.
+ */
+export function confidenceScore(modelProb: number, edge: number): number {
+  const base = modelProb * 85;
+  const bonus = Math.min(Math.max(edge, 0), 0.15) * 100;
+  return Math.min(99, Math.round(base + bonus));
+}
+
 function formatKickoff(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("es-CO", {
@@ -39,8 +55,8 @@ function formatKickoff(iso: string) {
 
 export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAlertProps) {
   const edgePct = (valueBet.edge * 100).toFixed(1);
-  const modelPct = (valueBet.model_prob * 100).toFixed(0);
-  const stakePct = (valueBet.kelly_fraction * 100).toFixed(1);
+  const confidence = confidenceScore(valueBet.model_prob, valueBet.edge);
+  const probability = probabilityBucket(valueBet.model_prob);
 
   return (
     <Card className="relative overflow-hidden border-value/40 bg-gradient-to-br from-value/[0.08] via-card to-card">
@@ -71,16 +87,16 @@ export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAle
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-display text-lg font-bold uppercase tracking-tight">
-                  Value Bet Detectado
+                  Apuesta Sugerida
                 </h3>
-                {valueBet.confidence === "high" && (
+                {probability.label === "Alta" && (
                   <span className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                    ⭐ Alta confianza
+                    ⭐ Probabilidad alta
                   </span>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Análisis algorítmico — Modelo Poisson + xG
+                Datos reales de API-Football · Modelo Poisson + xG
               </p>
             </div>
           </div>
@@ -93,10 +109,10 @@ export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAle
 
         <div className="mb-5 grid grid-cols-3 gap-3">
           <Stat
-            icon={<Target className="h-4 w-4" />}
-            label="Modelo"
-            value={`${modelPct}%`}
-            sub="Prob. real"
+            icon={<Gauge className="h-4 w-4" />}
+            label="Confianza"
+            value={`${confidence}%`}
+            sub="0–100"
           />
           <Stat
             icon={<TrendingUp className="h-4 w-4" />}
@@ -105,10 +121,11 @@ export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAle
             sub={valueBet.bookmaker.name}
           />
           <Stat
-            icon={<Sparkles className="h-4 w-4" />}
-            label="Stake"
-            value={`${stakePct}%`}
-            sub="Kelly ¼"
+            icon={<Target className="h-4 w-4" />}
+            label="Probabilidad"
+            value={probability.label}
+            sub="Modelo"
+            valueClass={probability.className}
           />
         </div>
 
@@ -189,11 +206,13 @@ function Stat({
   label,
   value,
   sub,
+  valueClass = "",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub: string;
+  valueClass?: string;
 }) {
   return (
     <div className="rounded-lg bg-background/60 p-3 ring-1 ring-border/40">
@@ -201,7 +220,7 @@ function Stat({
         {icon}
         <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
       </div>
-      <div className="font-mono text-lg font-bold tabular-nums">{value}</div>
+      <div className={`font-mono text-lg font-bold tabular-nums ${valueClass}`}>{value}</div>
       <div className="text-[10px] text-muted-foreground">{sub}</div>
     </div>
   );

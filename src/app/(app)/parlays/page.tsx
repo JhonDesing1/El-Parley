@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParlayCard } from "@/components/parlay/parlay-card";
 import { FunBetCard } from "@/components/parlay/funbet-card";
 import { Combinada80Card } from "@/components/parlay/combinada80-card";
 import { Combinada90Card } from "@/components/parlay/combinada90-card";
 import { isPremiumUser } from "@/lib/utils/auth";
-import { Layers, Lock, RefreshCw } from "lucide-react";
+import { Layers, Lock, RefreshCw, Crown, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -46,14 +47,27 @@ export default async function ParlaysPage() {
   const isCombi80 = (p: any) => (p.title as string)?.startsWith("Combinada 80%");
   const isCombi90 = (p: any) => (p.title as string)?.startsWith("Combinada 90%");
 
-  const funBets = (parlays ?? []).filter(isFunBet);
-  const combinadas80 = (parlays ?? []).filter(isCombi80);
-  const combinadas90 = (parlays ?? []).filter(isCombi90);
-  const regularParlays = (parlays ?? []).filter(
+  const allFunBets = (parlays ?? []).filter(isFunBet);
+  const allCombinadas80 = (parlays ?? []).filter(isCombi80);
+  const allCombinadas90 = (parlays ?? []).filter(isCombi90);
+  const allRegularParlays = (parlays ?? []).filter(
     (p) => !isFunBet(p) && !isCombi80(p) && !isCombi90(p),
   );
-  const premium = regularParlays.filter((p: any) => p.tier !== "free");
-  const free = regularParlays.filter((p: any) => p.tier === "free");
+
+  // Política por tier:
+  //   Free    → 1 combinada + 1 funbet
+  //   Premium → 3 combinadas + 2 funbets
+  const maxCombinadas = isPremium ? 3 : 1;
+  const maxFunBets = isPremium ? 2 : 1;
+
+  // Para premium priorizamos 90% (mayor probabilidad) → 80% → regulares.
+  // Para free priorizamos la combinada más segura que podamos mostrar sin blur.
+  const combinadasOrdered = isPremium
+    ? [...allCombinadas90, ...allCombinadas80, ...allRegularParlays.filter((p: any) => p.tier !== "free"), ...allRegularParlays.filter((p: any) => p.tier === "free")]
+    : [...allCombinadas80, ...allRegularParlays.filter((p: any) => p.tier === "free"), ...allCombinadas90, ...allRegularParlays.filter((p: any) => p.tier !== "free")];
+
+  const combinadas = combinadasOrdered.slice(0, maxCombinadas);
+  const funBets = allFunBets.slice(0, maxFunBets);
 
   const lastGenerated =
     parlays && parlays.length > 0 && parlays[0].created_at
@@ -91,14 +105,57 @@ export default async function ParlaysPage() {
         <EmptyState />
       ) : (
         <div className="space-y-10">
+          {/* ── Combinadas ───────────────────────────────────────── */}
+          {combinadas.length > 0 && (
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
+                    Combinadas de valor
+                    {isPremium && (
+                      <Badge variant="premium" className="gap-1">
+                        <Crown className="h-3 w-3" />
+                        PREMIUM
+                      </Badge>
+                    )}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isPremium
+                      ? "3 combinadas diarias priorizando ligas top del mundo. Modelo Poisson + xG."
+                      : "1 combinada diaria gratis. Upgrade a Premium para ver 3 combinadas."}
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  {combinadas.length}/{maxCombinadas}
+                </Badge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {combinadas.map((p: any) => {
+                  const premiumOnly = isCombi90(p) || p.tier !== "free";
+                  const locked = premiumOnly && !isPremium;
+                  if (isCombi90(p)) return <Combinada90Card key={p.id} parlay={p} isLocked={locked} />;
+                  if (isCombi80(p)) return <Combinada80Card key={p.id} parlay={p} />;
+                  return <ParlayCard key={p.id} parlay={p} isLocked={locked} />;
+                })}
+              </div>
+            </section>
+          )}
+
           {/* ── FunBet del día ───────────────────────────────────── */}
           {funBets.length > 0 && (
             <section>
-              <div className="mb-4">
-                <h2 className="font-display text-2xl font-bold">FunBet del día</h2>
-                <p className="text-sm text-muted-foreground">
-                  Alto riesgo, máxima emoción. Cuota acumulada ~x30. Una por día.
-                </p>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-bold">FunBet del día</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isPremium
+                      ? "2 FunBets diarios — alto riesgo, máxima emoción. Cuota acumulada ~x30."
+                      : "1 FunBet gratis al día — alto riesgo, cuota acumulada ~x30."}
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  {funBets.length}/{maxFunBets}
+                </Badge>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {funBets.map((p: any) => (
@@ -108,105 +165,30 @@ export default async function ParlaysPage() {
             </section>
           )}
 
-          {/* ── Combinadas 80% ───────────────────────────────────── */}
-          {combinadas80.length > 0 && (
+          {/* ── Upsell para usuarios free ────────────────────────── */}
+          {!isPremium && (
             <section>
-              <div className="mb-4">
-                <h2 className="font-display text-2xl font-bold">Combinadas 80%</h2>
-                <p className="text-sm text-muted-foreground">
-                  Probabilidad combinada del modelo superior al 80%. Cuota objetivo x3.5.
-                </p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {combinadas80.map((p: any) => (
-                  <Combinada80Card key={p.id} parlay={p} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Combinadas 90% Premium ───────────────────────────── */}
-          {combinadas90.length > 0 && (
-            <section>
-              <div className="mb-4 flex items-center gap-3">
-                <div>
-                  <h2 className="flex items-center gap-2 font-display text-2xl font-bold">
-                    Combinadas 90%
-                    <Badge variant="premium" className="gap-1">
-                      <Lock className="h-3 w-3" />
-                      PREMIUM
-                    </Badge>
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    4 combinadas diarias con probabilidad ≥ 90% y ganancia neta ≥ 0.60 por unidad.
-                  </p>
+              <div className="relative overflow-hidden rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/15 via-card to-card p-6">
+                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+                <div className="relative flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="flex items-center gap-2 font-display text-xl font-bold">
+                      <Lock className="h-5 w-5 text-primary" />
+                      Desbloquea 3 combinadas + 2 FunBets al día
+                    </h3>
+                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                      Premium desbloquea 3 combinadas diarias (incluyendo las de 90%+ de probabilidad)
+                      y 2 FunBets — con prioridad a ligas top del mundo.
+                    </p>
+                  </div>
+                  <Button asChild size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Link href="/premium">
+                      Ver planes
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {combinadas90.map((p: any) => (
-                  <Combinada90Card key={p.id} parlay={p} isLocked={!isPremium} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Parlays regulares ────────────────────────────────── */}
-          {regularParlays.length > 0 && (
-            <section>
-              <div className="mb-4">
-                <h2 className="font-display text-2xl font-bold">Combinadas de valor</h2>
-                <p className="text-sm text-muted-foreground">
-                  Edge positivo individual en cada selección. Modelo Poisson + xG.
-                </p>
-              </div>
-              <Tabs defaultValue="free" className="w-full">
-                <TabsList>
-                  <TabsTrigger value="free">
-                    Gratis
-                    {free.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {free.length}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="premium">
-                    Premium
-                    {premium.length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {premium.length}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="free" className="mt-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {free.length === 0 ? (
-                      <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
-                        No hay combinadas gratuitas disponibles hoy.
-                      </p>
-                    ) : (
-                      free.map((parlay: any) => (
-                        <ParlayCard key={parlay.id} parlay={parlay} />
-                      ))
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="premium" className="mt-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {premium.length === 0 ? (
-                      <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
-                        No hay combinadas premium disponibles hoy.
-                      </p>
-                    ) : (
-                      premium.map((parlay: any) => (
-                        <ParlayCard key={parlay.id} parlay={parlay} isLocked={!isPremium} />
-                      ))
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
             </section>
           )}
         </div>

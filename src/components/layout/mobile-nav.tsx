@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import Link, { LinkProps } from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Zap, TrendingUp, Newspaper, ClipboardList, Sparkles, BookOpen } from "lucide-react";
+import { Menu, X, Zap, TrendingUp, LineChart, ClipboardList, Sparkles, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type NavLink = {
@@ -14,13 +14,13 @@ type NavLink = {
 
 const NAV_LINKS: NavLink[] = [
   { href: "/", label: "Hoy", icon: Zap },
-  { href: "/parlays", label: "Parlays", icon: TrendingUp },
-  { href: "/blog", label: "Análisis", icon: Newspaper },
+  { href: "/parlays", label: "Combinadas", icon: TrendingUp },
+  { href: "/analisis", label: "Análisis", icon: LineChart },
+  { href: "/bankroll", label: "Bankroll", icon: BookOpen },
 ];
 
 const AUTH_NAV_LINKS: NavLink[] = [
-  { href: "/mis-picks", label: "Mis Picks", icon: ClipboardList },
-  { href: "/bankroll", label: "Bankroll", icon: BookOpen },
+  { href: "/mis-picks", label: "Mis Apuestas", icon: ClipboardList },
 ];
 
 export function MobileNav({

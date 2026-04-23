@@ -136,7 +136,7 @@ export function RegisterPickModal({
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" className="w-full gap-2">
             <ClipboardList className="h-4 w-4" />
-            Registrar pick
+            Registrar apuesta
           </Button>
         </DialogTrigger>
       )}
@@ -148,11 +148,11 @@ export function RegisterPickModal({
               <CheckCircle2 className="h-7 w-7 text-emerald-400" />
             </div>
             <DialogHeader>
-              <DialogTitle>Pick registrado</DialogTitle>
+              <DialogTitle>Apuesta registrada</DialogTitle>
               <DialogDescription>
-                Tu pick quedó guardado. Lo verás en{" "}
+                Tu apuesta quedó guardada. La verás en{" "}
                 <a href="/mis-picks" className="underline underline-offset-2 hover:text-foreground">
-                  Mis picks
+                  Mis Apuestas
                 </a>{" "}
                 cuando el partido termine.
               </DialogDescription>
@@ -164,7 +164,7 @@ export function RegisterPickModal({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <DialogHeader>
-              <DialogTitle>Registrar pick</DialogTitle>
+              <DialogTitle>Registrar apuesta</DialogTitle>
               <DialogDescription className="truncate">{matchLabel}</DialogDescription>
             </DialogHeader>
 
@@ -234,7 +234,7 @@ export function RegisterPickModal({
               <textarea
                 id="pick-notes"
                 rows={2}
-                placeholder="¿Por qué te gusta este pick?"
+                placeholder="¿Por qué te gusta esta apuesta?"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

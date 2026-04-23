@@ -1,12 +1,15 @@
 export type MarketType =
   | "1x2"
   | "double_chance"
-  | "over_under_2_5"
   | "over_under_1_5"
+  | "over_under_2_5"
+  | "over_under_3_5"
   | "btts"
   | "correct_score"
   | "asian_handicap"
-  | "draw_no_bet";
+  | "draw_no_bet"
+  | "corners_over_under"
+  | "cards_over_under";
 
 export type MatchStatus =
   | "scheduled"

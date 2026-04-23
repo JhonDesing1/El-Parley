@@ -275,7 +275,7 @@ export default async function DashboardPage({
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4" />
-              Mis picks recientes
+              Mis apuestas recientes
               {!!pendingPicksCount && pendingPicksCount > 0 && (
                 <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400 ring-1 ring-amber-500/25">
                   {pendingPicksCount} pendiente{pendingPicksCount !== 1 ? "s" : ""}
@@ -293,11 +293,11 @@ export default async function DashboardPage({
             {!recentPicks?.length ? (
               <div className="py-4 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Sin picks registrados aún.
+                  Sin apuestas registradas aún.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Ve a la ficha de un partido y haz clic en{" "}
-                  <span className="font-semibold text-foreground">Registrar pick</span>.
+                  <span className="font-semibold text-foreground">Registrar apuesta</span>.
                 </p>
               </div>
             ) : (

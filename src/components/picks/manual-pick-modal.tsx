@@ -21,15 +21,38 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import type { MarketType } from "@/types";
 
-const MARKET_OPTIONS: { value: MarketType; label: string }[] = [
-  { value: "1x2", label: "Resultado final (1X2)" },
-  { value: "btts", label: "Ambos anotan" },
-  { value: "over_under_2_5", label: "Más/Menos 2.5 goles" },
-  { value: "over_under_1_5", label: "Más/Menos 1.5 goles" },
-  { value: "double_chance", label: "Doble oportunidad" },
-  { value: "draw_no_bet", label: "Empate no apuesta" },
-  { value: "asian_handicap", label: "Hándicap asiático" },
-  { value: "correct_score", label: "Resultado exacto" },
+interface MarketGroup {
+  label: string;
+  options: { value: MarketType; label: string }[];
+}
+
+const MARKET_GROUPS: MarketGroup[] = [
+  {
+    label: "Resultado",
+    options: [
+      { value: "1x2", label: "Resultado final (1X2)" },
+      { value: "double_chance", label: "Doble oportunidad" },
+      { value: "draw_no_bet", label: "Empate no apuesta" },
+      { value: "correct_score", label: "Resultado exacto" },
+      { value: "asian_handicap", label: "Hándicap asiático" },
+    ],
+  },
+  {
+    label: "Goles",
+    options: [
+      { value: "btts", label: "Ambos anotan" },
+      { value: "over_under_1_5", label: "Más/Menos 1.5 goles" },
+      { value: "over_under_2_5", label: "Más/Menos 2.5 goles" },
+      { value: "over_under_3_5", label: "Más/Menos 3.5 goles" },
+    ],
+  },
+  {
+    label: "Especiales",
+    options: [
+      { value: "corners_over_under", label: "Córners Más/Menos" },
+      { value: "cards_over_under", label: "Tarjetas Más/Menos" },
+    ],
+  },
 ];
 
 const MARKET_SELECTIONS: Record<string, { value: string; label: string }[]> = {
@@ -42,13 +65,25 @@ const MARKET_SELECTIONS: Record<string, { value: string; label: string }[]> = {
     { value: "yes", label: "Sí" },
     { value: "no", label: "No" },
   ],
+  over_under_1_5: [
+    { value: "over", label: "Más 1.5" },
+    { value: "under", label: "Menos 1.5" },
+  ],
   over_under_2_5: [
     { value: "over", label: "Más 2.5" },
     { value: "under", label: "Menos 2.5" },
   ],
-  over_under_1_5: [
-    { value: "over", label: "Más 1.5" },
-    { value: "under", label: "Menos 1.5" },
+  over_under_3_5: [
+    { value: "over", label: "Más 3.5" },
+    { value: "under", label: "Menos 3.5" },
+  ],
+  corners_over_under: [
+    { value: "over", label: "Más" },
+    { value: "under", label: "Menos" },
+  ],
+  cards_over_under: [
+    { value: "over", label: "Más" },
+    { value: "under", label: "Menos" },
   ],
   double_chance: [
     { value: "home_draw", label: "Local o Empate (1X)" },
@@ -65,6 +100,9 @@ const MARKET_SELECTIONS: Record<string, { value: string; label: string }[]> = {
   ],
   correct_score: [],
 };
+
+/** Mercados que requieren una línea numérica (córners, tarjetas, hándicap asiático). */
+const LINE_MARKETS = new Set<MarketType>(["corners_over_under", "cards_over_under", "asian_handicap"]);
 
 function resetForm() {
   return {
@@ -141,7 +179,13 @@ export function ManualPickModal() {
 
   const selectionOptions = MARKET_SELECTIONS[form.market] ?? [];
   const isCorrectScore = form.market === "correct_score";
-  const isAsianHandicap = form.market === "asian_handicap";
+  const isLineMarket = LINE_MARKETS.has(form.market);
+  const linePlaceholder =
+    form.market === "corners_over_under"
+      ? "9.5"
+      : form.market === "cards_over_under"
+        ? "3.5"
+        : "-0.5";
   const potentialReturn =
     form.odds && form.stake
       ? Math.round(parseFloat(form.odds) * parseFloat(form.stake)).toLocaleString("es-CO")
@@ -203,7 +247,7 @@ export function ManualPickModal() {
       <DialogTrigger asChild>
         <Button size="sm" className="gap-1.5">
           <Plus className="h-4 w-4" />
-          Registrar pick
+          Registrar apuesta
         </Button>
       </DialogTrigger>
 
@@ -215,10 +259,10 @@ export function ManualPickModal() {
               <CheckCircle2 className="h-7 w-7 text-emerald-400" />
             </div>
             <DialogHeader>
-              <DialogTitle>Pick registrado</DialogTitle>
+              <DialogTitle>Apuesta registrada</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              Tu pick quedó guardado. Aparecerá como <strong>Pendiente</strong> hasta que el partido
+              Tu apuesta quedó guardada. Aparecerá como <strong>Pendiente</strong> hasta que el partido
               termine.
             </p>
             <div className="flex gap-2">
@@ -244,7 +288,7 @@ export function ManualPickModal() {
           /* ── Step 1: select match ── */
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Registrar pick manual</DialogTitle>
+              <DialogTitle>Registrar apuesta</DialogTitle>
             </DialogHeader>
 
             <div className="relative">
@@ -298,7 +342,7 @@ export function ManualPickModal() {
           /* ── Step 2: pick details ── */
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Registrar pick</DialogTitle>
+              <DialogTitle>Registrar apuesta</DialogTitle>
             </DialogHeader>
 
             {/* Selected match chip */}
@@ -327,10 +371,14 @@ export function ManualPickModal() {
                 onChange={(e) => set("market", e.target.value as MarketType)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {MARKET_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+                {MARKET_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -367,7 +415,7 @@ export function ManualPickModal() {
             </div>
 
             {/* Odds + Line */}
-            <div className={`grid gap-3 ${isAsianHandicap ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div className={`grid gap-3 ${isLineMarket ? "grid-cols-2" : "grid-cols-1"}`}>
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold">Cuota</label>
                 <input
@@ -381,13 +429,13 @@ export function ManualPickModal() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
-              {isAsianHandicap && (
+              {isLineMarket && (
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold">Línea</label>
                   <input
                     type="number"
-                    step="0.25"
-                    placeholder="-0.5"
+                    step={form.market === "asian_handicap" ? "0.25" : "0.5"}
+                    placeholder={linePlaceholder}
                     value={form.line}
                     onChange={(e) => set("line", e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -452,7 +500,7 @@ export function ManualPickModal() {
               </label>
               <textarea
                 rows={2}
-                placeholder="¿Por qué te gusta este pick?"
+                placeholder="¿Por qué te gusta esta apuesta?"
                 value={form.notes}
                 onChange={(e) => set("notes", e.target.value)}
                 className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -483,7 +531,7 @@ export function ManualPickModal() {
                 disabled={isPending || !form.odds}
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Registrar pick
+                Registrar apuesta
               </Button>
             </div>
 

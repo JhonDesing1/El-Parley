@@ -20,7 +20,7 @@ import { RoiChart } from "@/components/picks/roi-chart";
 import { ManualPickModal } from "@/components/picks/manual-pick-modal";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Mis Picks — El Parley" };
+export const metadata: Metadata = { title: "Mis Apuestas — El Parley" };
 
 const RESULT_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -159,7 +159,7 @@ export default async function MisPicksPage({
             <ClipboardList className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight">Mis Picks</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Mis Apuestas</h1>
             <p className="text-sm text-muted-foreground">Historial de tus apuestas registradas</p>
           </div>
         </div>
@@ -170,7 +170,7 @@ export default async function MisPicksPage({
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
           icon={<ClipboardList className="h-4 w-4" />}
-          label="Total picks"
+          label="Total apuestas"
           value={String(profile?.total_picks ?? 0)}
         />
         <StatCard
@@ -264,13 +264,13 @@ export default async function MisPicksPage({
           </div>
           <h3 className="font-display text-lg font-bold">
             {resultFilter
-              ? `Sin picks ${RESULT_LABELS[resultFilter]?.toLowerCase()}s`
-              : "Sin picks aún"}
+              ? `Sin apuestas ${RESULT_LABELS[resultFilter]?.toLowerCase()}s`
+              : "Sin apuestas aún"}
           </h3>
           <p className="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">
             {resultFilter
               ? "No tienes picks con este estado todavía."
-              : "Registra tu primer pick desde la ficha de un partido, un value bet detectado, o con el botón «Registrar pick»."}
+              : "Registra tu primera apuesta desde la ficha de un partido, una apuesta sugerida, o con el botón «Registrar apuesta»."}
           </p>
         </Card>
       ) : (

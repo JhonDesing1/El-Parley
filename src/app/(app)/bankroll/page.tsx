@@ -90,7 +90,7 @@ const GOLDEN_RULES = [
     icon: TrendingUp,
     title: "Registra cada apuesta",
     description:
-      'Sin tracking no hay mejora. Usa "Mis Picks" para llevar el historial completo: mercado, cuota, stake, resultado y P&L.',
+      'Sin tracking no hay mejora. Usa "Mis Apuestas" para llevar el historial completo: mercado, cuota, stake, resultado y P&L.',
   },
   {
     icon: Percent,

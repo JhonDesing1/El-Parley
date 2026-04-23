@@ -136,10 +136,10 @@ export function OddsTable({
                                 type="button"
                                 onClick={() => setPickModal({ odd: o, selectionLabel: s.label })}
                                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-                                title="Registrar pick"
+                                title="Registrar apuesta"
                               >
                                 <ClipboardList className="h-3 w-3" />
-                                pick
+                                apostar
                               </button>
                             )}
                           </div>
