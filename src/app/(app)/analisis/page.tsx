@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
+import {
+  fetchNextFixtureForTeam,
+  fetchPredictionsForFixture,
+} from "@/lib/api/api-football";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,7 +61,9 @@ function normTeam(t: RawTeam | RawTeam[] | null | undefined): RawTeam | null {
 }
 
 function formatPct(p: number) {
-  return `${Math.round(p * 100)}%`;
+  // Nunca mostrar 100% — el fútbol siempre tiene varianza (rojas, lesiones, penales).
+  const clamped = Math.min(0.99, Math.max(0.01, p));
+  return `${Math.round(clamped * 100)}%`;
 }
 
 export default async function AnalisisPage({
@@ -86,6 +92,9 @@ export default async function AnalisisPage({
   // ── 2. Equipo seleccionado ──────────────────────────────────────────────────
   let selectedTeam: RawTeam | null = null;
   let nextMatch: RawMatchRow | null = null;
+  // true si el fixture viene sólo de API-Football (aún no está en nuestra BD):
+  // en ese caso no podemos linkear a /partido/:id porque devolvería 404
+  let matchInDb = false;
   if (hasTeam) {
     const { data: teamRow } = await supabase
       .from("teams")
@@ -111,6 +120,42 @@ export default async function AnalisisPage({
         .limit(1)
         .maybeSingle();
       nextMatch = (matchRow ?? null) as RawMatchRow | null;
+      matchInDb = nextMatch != null;
+
+      // Fallback: si la BD aún no tiene el fixture (liga fuera del cron),
+      // lo pedimos a API-Football y derivamos los xG desde /predictions.
+      if (!nextMatch) {
+        const af = await fetchNextFixtureForTeam(teamId);
+        if (af && (af.status === "scheduled" || af.status === "live")) {
+          const preds = await fetchPredictionsForFixture(af.id, af.leagueId);
+          nextMatch = {
+            id: af.id,
+            kickoff: af.kickoff,
+            status: af.status,
+            venue: af.venue,
+            model_expected_goals_home: preds?.homeXg ?? null,
+            model_expected_goals_away: preds?.awayXg ?? null,
+            home_team: {
+              id: af.home.id,
+              name: af.home.name,
+              short_name: null,
+              logo_url: af.home.logo,
+            },
+            away_team: {
+              id: af.away.id,
+              name: af.away.name,
+              short_name: null,
+              logo_url: af.away.logo,
+            },
+            league: {
+              id: af.leagueId,
+              name: af.leagueName,
+              country: af.leagueCountry,
+              logo_url: af.leagueLogo,
+            },
+          };
+        }
+      }
     }
   }
 
@@ -158,6 +203,7 @@ export default async function AnalisisPage({
         <TeamDashboard
           team={selectedTeam}
           nextMatch={nextMatch}
+          matchInDb={matchInDb}
         />
       )}
 
@@ -250,9 +296,11 @@ function NotCoveredFallback() {
 function TeamDashboard({
   team,
   nextMatch,
+  matchInDb,
 }: {
   team: RawTeam;
   nextMatch: RawMatchRow | null;
+  matchInDb: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -284,7 +332,7 @@ function TeamDashboard({
       </div>
 
       {nextMatch ? (
-        <NextMatchAnalysis match={nextMatch} teamId={team.id} />
+        <NextMatchAnalysis match={nextMatch} teamId={team.id} matchInDb={matchInDb} />
       ) : (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
@@ -301,7 +349,15 @@ function TeamDashboard({
   );
 }
 
-function NextMatchAnalysis({ match, teamId }: { match: RawMatchRow; teamId: number }) {
+function NextMatchAnalysis({
+  match,
+  teamId,
+  matchInDb,
+}: {
+  match: RawMatchRow;
+  teamId: number;
+  matchInDb: boolean;
+}) {
   const home = normTeam(match.home_team);
   const away = normTeam(match.away_team);
   const league = match.league;
@@ -419,14 +475,16 @@ function NextMatchAnalysis({ match, teamId }: { match: RawMatchRow; teamId: numb
             </div>
             <TeamCell team={away} highlight={!isHome} />
           </div>
-          <div className="mt-5 flex justify-center">
-            <Button asChild size="sm" variant="outline" className="gap-1.5">
-              <Link href={`/partido/${match.id}`}>
-                Ver análisis completo
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </div>
+          {matchInDb && (
+            <div className="mt-5 flex justify-center">
+              <Button asChild size="sm" variant="outline" className="gap-1.5">
+                <Link href={`/partido/${match.id}`}>
+                  Ver análisis completo
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -571,7 +629,8 @@ function TeamCell({
 }
 
 function ProbRow({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100);
+  const clamped = Math.min(0.99, Math.max(0.01, value));
+  const pct = Math.round(clamped * 100);
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">

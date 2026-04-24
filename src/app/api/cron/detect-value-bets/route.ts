@@ -196,8 +196,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // ── Hándicap asiático (solo líneas .5) ────────────────────────────────
+      // ── Hándicap asiático (solo líneas .5, |line| ≤ 2.5) ──────────────────
+      // Descartamos |line| > 2.5 porque muchas casas (esp. LATAM) no las cubren
       else if (o.market === "asian_handicap" && o.line != null) {
+        if (Math.abs(o.line) > 2.5) continue;
         const side = o.selection as "home" | "away";
         modelProb = calculateHandicapProbability(xgHome, xgAway, side, o.line);
       }

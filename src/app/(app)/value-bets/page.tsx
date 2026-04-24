@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Lock, TrendingUp, Target, Zap, ChevronRight, AlertTriangle, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isPremiumUser } from "@/lib/utils/auth";
+import { clampDisplayProb } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
@@ -112,7 +113,14 @@ export default async function RecomendadosPage() {
   const highConf  = matchGroups.filter((g) => g.bets[0]?.confidence === "high").length;
   const avgProb   =
     total > 0
-      ? (matchGroups.reduce((s, g) => s + Number(g.bets[0]?.model_prob ?? 0), 0) / total * 100).toFixed(0)
+      ? (
+          (matchGroups.reduce(
+            (s, g) => s + clampDisplayProb(Number(g.bets[0]?.model_prob ?? 0)),
+            0,
+          ) /
+            total) *
+          100
+        ).toFixed(0)
       : "0";
 
   return (
@@ -188,7 +196,7 @@ export default async function RecomendadosPage() {
             const home   = m?.home_team;
             const away   = m?.away_team;
             const conf   = (topBet?.confidence ?? "low") as "high" | "medium" | "low";
-            const prob   = Number(topBet?.model_prob ?? 0) * 100;
+            const prob   = clampDisplayProb(Number(topBet?.model_prob ?? 0)) * 100;
             const isHigh = conf === "high";
 
             return (

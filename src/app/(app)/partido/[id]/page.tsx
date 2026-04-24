@@ -127,8 +127,7 @@ export default async function PartidoPage({
   const stats    = (match.stats as { lineups?: MatchLineups } | null);
   const lineups  = stats?.lineups ?? null;
 
-  // Apuesta recomendada: mejor value bet por model_prob (≥ 0.80 prioritized)
-  const allBets         = valueBets ?? [];
+  const allBets = valueBets ?? [];
   const freeValueBets   = allBets.filter((v) => !v.is_premium);
   const premiumValueBets = allBets.filter((v) => v.is_premium);
   const visibleValueBets = isPremium ? allBets : freeValueBets;
@@ -505,7 +504,7 @@ function RecommendedBet({
   awayTeam: { name: string } | null;
 }) {
   const bm        = bet.bookmaker as { slug: string; name: string } | null;
-  const prob      = Number(bet.model_prob ?? 0);
+  const prob      = Math.min(0.99, Math.max(0.01, Number(bet.model_prob ?? 0)));
   const probPct   = (prob * 100).toFixed(0);
   const isHighProb = prob >= 0.85;
   const affUrl    = bm?.slug ? buildAffiliateUrl(bm.slug) : null;
@@ -874,7 +873,7 @@ function ValueBetCard({
       </div>
       <div className="mb-3 flex gap-3 text-xs text-muted-foreground">
         <span>Edge <strong className="text-emerald-500">+{(edge * 100).toFixed(1)}%</strong></span>
-        <span>Prob. <strong>{(modelProb * 100).toFixed(0)}%</strong></span>
+        <span>Prob. <strong>{(Math.min(0.99, Math.max(0.01, modelProb)) * 100).toFixed(0)}%</strong></span>
         <span>{bookmakerName}</span>
       </div>
       <p className="mb-3 text-xs text-muted-foreground">{reasoning}</p>

@@ -31,6 +31,12 @@ export function probabilityBucket(modelProb: number): { label: "Alta" | "Media" 
   return { label: "Baja", className: "text-red-400" };
 }
 
+/** Probabilidad realista en % — nunca 100% (siempre hay varianza en fútbol). */
+export function displayProbPct(modelProb: number): number {
+  const clamped = Math.min(0.99, Math.max(0.01, modelProb));
+  return Math.round(clamped * 100);
+}
+
 /**
  * Confianza 0-100 derivada del modelo. Combina probabilidad y edge
  * para reflejar qué tan fuerte es la apuesta. Cap a 99 para evitar 100% absolutos.

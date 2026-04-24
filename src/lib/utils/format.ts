@@ -27,6 +27,22 @@ export function formatProbability(prob: number): string {
   return `${(prob * 100).toFixed(1)}%`;
 }
 
+/**
+ * Clampa una probabilidad (0..1) a un rango realista para display.
+ * El modelo nunca debe decir "100% seguro" — siempre existe varianza
+ * (rojas, lesiones súbitas, penales). Usamos [1%, 99%] como cota.
+ */
+export function clampDisplayProb(prob: number): number {
+  if (!Number.isFinite(prob)) return 0.5;
+  return Math.min(0.99, Math.max(0.01, prob));
+}
+
+/** Formatea una probabilidad 0..1 como porcentaje entero, clamped a [1%, 99%]. */
+export function formatProbPct(prob: number, digits: 0 | 1 = 0): string {
+  const clamped = clampDisplayProb(prob);
+  return `${(clamped * 100).toFixed(digits)}%`;
+}
+
 export function formatCOP(amount: number): string {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",

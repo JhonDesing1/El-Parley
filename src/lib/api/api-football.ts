@@ -89,7 +89,7 @@ async function af<T = any>(path: string, params: Record<string, string | number>
 
 interface AfFixture {
   fixture: { id: number; date: string; status: { short: string; elapsed: number | null }; venue: { name: string | null }; referee: string | null };
-  league: { id: number; season: number; round: string };
+  league: { id: number; season: number; round: string; name?: string; country?: string | null; logo?: string | null };
   teams: { home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string } };
   goals: { home: number | null; away: number | null };
   score: { halftime: { home: number | null; away: number | null } };
@@ -193,9 +193,85 @@ const MARKET_MAP: Record<string, OddsMapping> = {
     const handicap = parseFloat(m[2]);
     // Solo líneas .5 para evitar push/devolución parcial
     if (Math.abs(handicap) % 1 !== 0.5) return null;
+    // Muchas casas (esp. en LATAM) no cubren líneas > 2.5 — descartamos
+    if (Math.abs(handicap) > 2.5) return null;
     return { market: "asian_handicap", selection: side, line: handicap };
   },
 };
+
+/**
+ * HTTP client con caché de Next.js (revalidate + tags) — útil para páginas SSR
+ * que necesitan datos frescos pero no en cada request. Usa esto cuando el
+ * consumidor es el runtime de Next (Server Component / route handler).
+ */
+async function afCached<T = any>(
+  path: string,
+  params: Record<string, string | number>,
+  revalidateSec: number,
+  tag?: string,
+): Promise<T> {
+  const url = new URL(`${BASE}${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+
+  const res = await fetch(url.toString(), {
+    headers: headers(),
+    next: { revalidate: revalidateSec, ...(tag ? { tags: [tag] } : {}) },
+  });
+  if (!res.ok) throw new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  if (json.errors && Object.keys(json.errors).length > 0) {
+    throw new Error(`API-Football error: ${JSON.stringify(json.errors)}`);
+  }
+  return json.response as T;
+}
+
+export interface NextFixtureForTeam {
+  id: number;
+  kickoff: string;
+  status: ReturnType<typeof mapStatus>;
+  venue: string | null;
+  leagueId: number;
+  leagueName: string;
+  leagueCountry: string | null;
+  leagueLogo: string | null;
+  home: { id: number; name: string; logo: string | null };
+  away: { id: number; name: string; logo: string | null };
+}
+
+/**
+ * Próximo partido confirmado de un equipo — usado por /analisis como fallback
+ * cuando la BD aún no lo tiene sincronizado (liga fuera del set high-priority).
+ * Cachea 30 min para respetar el cupo de 100 req/día.
+ *
+ * Devuelve `null` si API-Football no tiene fixture programado.
+ */
+export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtureForTeam | null> {
+  try {
+    const response = await afCached<AfFixture[]>(
+      "/fixtures",
+      { team: teamId, next: 1 },
+      30 * 60, // 30 minutos
+      `team-${teamId}-next`,
+    );
+    if (!response.length) return null;
+    const f = response[0];
+    return {
+      id: f.fixture.id,
+      kickoff: f.fixture.date,
+      status: mapStatus(f.fixture.status.short),
+      venue: f.fixture.venue.name,
+      leagueId: f.league.id,
+      leagueName: f.league.name ?? "",
+      leagueCountry: f.league.country ?? null,
+      leagueLogo: f.league.logo ?? null,
+      home: { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo },
+      away: { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo },
+    };
+  } catch (err) {
+    console.warn("[fetchNextFixtureForTeam] falló:", err);
+    return null;
+  }
+}
 
 export async function fetchFixturesForLeague(leagueId: number, season: number, fromDate: string, toDate: string) {
   const response = await af<AfFixture[]>("/fixtures", {

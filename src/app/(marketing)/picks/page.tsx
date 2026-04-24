@@ -314,7 +314,7 @@ function SuggestedBetCard({ bet, compact = false }: { bet: any; compact?: boolea
   const marketLabel = MARKET_LABELS[bet.market] ?? bet.market;
   const selectionLabel = SELECTION_LABELS[bet.selection] ?? bet.selection;
   const resultStyle = RESULT_STYLES[bet.result] ?? RESULT_STYLES.pending;
-  const prob = Math.round((bet.model_prob ?? 0) * 100);
+  const prob = Math.round(Math.min(0.99, Math.max(0.01, bet.model_prob ?? 0)) * 100);
 
   return (
     <Card className={compact ? "p-3" : "p-4"}>

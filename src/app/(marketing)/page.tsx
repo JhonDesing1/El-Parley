@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { isPremiumUser, getCurrentUser } from "@/lib/utils/auth";
+import { clampDisplayProb } from "@/lib/utils/format";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { Sparkles, TrendingUp, Trophy, Lock, ArrowRight, Target, ShieldCheck, Zap, Globe, Crown } from "lucide-react";
 import Image from "next/image";
@@ -37,6 +38,14 @@ function dedupeByMatch<T extends { match_id: number }>(bets: T[], max: number): 
     if (out.length >= max) break;
   }
   return out;
+}
+
+/** Descarta handicaps asiáticos con |line| > 2.5 — muchas casas no los cubren. */
+function filterSupportedMarkets<T extends { market?: string | null; line?: number | null }>(bets: T[]): T[] {
+  return bets.filter((b) => {
+    if (b.market === "asian_handicap" && b.line != null && Math.abs(b.line) > 2.5) return false;
+    return true;
+  });
 }
 
 export default async function HomePage() {
@@ -98,14 +107,29 @@ export default async function HomePage() {
       .limit(80),
   ]);
 
+  // Filtra handicaps no soportados (|line| > 2.5) antes de procesar
+  const freeBetsClean = filterSupportedMarkets(freeBetsRaw ?? []);
+  const premiumBetsClean = filterSupportedMarkets(premiumBetsRaw ?? []);
+  const topLeagueBetsClean = filterSupportedMarkets(topLeagueBetsRaw ?? []);
+
   // Free: máx 2 apuestas sugeridas, de partidos diferentes, priorizando ligas top
-  const freeValueBets = dedupeByMatch(sortByTopLeaguesAndProb(freeBetsRaw ?? []), 2);
+  const freeValueBets = dedupeByMatch(sortByTopLeaguesAndProb(freeBetsClean), 2);
 
   // Premium: 3 apuestas extra para usuarios premium — también de partidos diferentes
   // y que NO coincidan con las 2 gratuitas para no repetir.
   const freeMatchIds = new Set(freeValueBets.map((vb: any) => vb.match_id));
-  const premiumPool = (premiumBetsRaw ?? []).filter((vb: any) => !freeMatchIds.has(vb.match_id));
-  const premiumTeasers = dedupeByMatch(sortByTopLeaguesAndProb(premiumPool), 3);
+
+  // Primero intentamos con bets marcadas como is_premium (selección curada).
+  // Si no hay suficientes, completamos con el pool general por probabilidad del modelo
+  // para que los suscriptores SIEMPRE vean las 3 apuestas extra.
+  const primaryPool = premiumBetsClean.filter((vb: any) => !freeMatchIds.has(vb.match_id));
+  let premiumTeasers = dedupeByMatch(sortByTopLeaguesAndProb(primaryPool), 3);
+  if (premiumTeasers.length < 3) {
+    const usedIds = new Set([...freeMatchIds, ...premiumTeasers.map((vb: any) => vb.match_id)]);
+    const fallbackPool = topLeagueBetsClean.filter((vb: any) => !usedIds.has(vb.match_id));
+    const extras = dedupeByMatch(sortByTopLeaguesAndProb(fallbackPool), 3 - premiumTeasers.length);
+    premiumTeasers = [...premiumTeasers, ...extras];
+  }
 
   const allBets = [...freeValueBets, ...premiumTeasers];
   const matchIdsWithValue = new Set(allBets.map((vb: any) => vb.match_id));
@@ -126,7 +150,7 @@ export default async function HomePage() {
   const hasAnyBets = freeValueBets.length > 0 || premiumTeasers.length > 0;
 
   // Agrupa apuestas por liga (solo ligas top), mostrando hasta 4 por liga y hasta 4 ligas
-  const sortedLeagueBets = sortByTopLeaguesAndProb((topLeagueBetsRaw ?? []) as any[]);
+  const sortedLeagueBets = sortByTopLeaguesAndProb(topLeagueBetsClean as any[]);
   const leagueMap = new Map<number, { leagueMeta: any; bets: any[] }>();
   for (const vb of sortedLeagueBets) {
     const leagueId = vb.match?.league?.id;
@@ -429,7 +453,7 @@ const MARKET_LABEL: Record<string, string> = {
 };
 
 function LeaguePickRow({ vb }: { vb: any }) {
-  const modelPct = Math.round(vb.model_prob * 100);
+  const modelPct = Math.round(clampDisplayProb(vb.model_prob) * 100);
   const edgePct = (vb.edge * 100).toFixed(1);
 
   const confidence = vb.confidence as "low" | "medium" | "high";

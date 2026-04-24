@@ -42,7 +42,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
   return (
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
-        {/* Logo con halo blanco para resaltar los colores */}
+        {/* Logo con borde negro + halo blanco para resaltar los colores */}
         <Link href="/" className="flex items-center gap-2.5">
           <Image
             src="/logo.png"
@@ -51,13 +51,24 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
             height={46}
             className="h-[46px] w-auto"
             priority
-            style={{ filter: "drop-shadow(0 0 8px rgba(255, 255, 255, 0.75)) drop-shadow(0 0 18px rgba(255, 255, 255, 0.45))" }}
+            style={{
+              filter: [
+                "drop-shadow(0 0 0.6px #000)",
+                "drop-shadow(0 0 0.6px #000)",
+                "drop-shadow(0 0 0.6px #000)",
+                "drop-shadow(0 0 0.6px #000)",
+                "drop-shadow(0 0 8px rgba(255, 255, 255, 0.75))",
+                "drop-shadow(0 0 18px rgba(255, 255, 255, 0.45))",
+              ].join(" "),
+            }}
           />
           <span
             className="text-xl font-bold tracking-wide"
             style={{
               color: "#3D5A3E",
-              textShadow: "0 0 10px rgba(255, 255, 255, 0.85), 0 0 20px rgba(255, 255, 255, 0.55)",
+              WebkitTextStroke: "0.6px #000",
+              textShadow:
+                "0 0 10px rgba(255, 255, 255, 0.85), 0 0 20px rgba(255, 255, 255, 0.55)",
             }}
           >
             EL PARLEY
@@ -134,13 +145,24 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
                   width={138}
                   height={41}
                   className="h-[41px] w-auto"
-                  style={{ filter: "drop-shadow(0 0 6px rgba(255, 255, 255, 0.75)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.45))" }}
+                  style={{
+                    filter: [
+                      "drop-shadow(0 0 0.6px #000)",
+                      "drop-shadow(0 0 0.6px #000)",
+                      "drop-shadow(0 0 0.6px #000)",
+                      "drop-shadow(0 0 0.6px #000)",
+                      "drop-shadow(0 0 6px rgba(255, 255, 255, 0.75))",
+                      "drop-shadow(0 0 14px rgba(255, 255, 255, 0.45))",
+                    ].join(" "),
+                  }}
                 />
                 <span
                   className="text-lg font-bold tracking-wide"
                   style={{
                     color: "#3D5A3E",
-                    textShadow: "0 0 8px rgba(255, 255, 255, 0.85), 0 0 16px rgba(255, 255, 255, 0.55)",
+                    WebkitTextStroke: "0.6px #000",
+                    textShadow:
+                      "0 0 8px rgba(255, 255, 255, 0.85), 0 0 16px rgba(255, 255, 255, 0.55)",
                   }}
                 >
                   EL PARLEY
