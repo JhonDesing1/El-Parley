@@ -290,61 +290,49 @@ function buildFixture(f: AfFixture): NextFixtureForTeam {
  * Cachea 30 min por team para respetar el cupo de 100 req/día.
  */
 export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtureResult> {
-  try {
-    const response = await afCached<AfFixture[]>(
-      "/fixtures",
-      { team: teamId, next: 1 },
-      30 * 60,
-      `team-${teamId}-next`,
-    );
-    if (response.length > 0) {
-      return { kind: "ok", fixture: buildFixture(response[0]) };
-    }
-  } catch (err) {
-    console.warn("[fetchNextFixtureForTeam] next=1 falló:", err);
-    const reason = err instanceof Error ? err.message : "API-Football no disponible";
-    // Seguimos al fallback — puede que next=1 tenga un hiccup puntual.
-    return { kind: "error", reason };
-  }
-
-  // Fallback: por temporada. API-Football exige `season` cuando se consulta
-  // fixtures por team sin `next/last`. Probamos año actual y anterior para
-  // cubrir tanto ligas europeas (2025-26) como americanas (calendario natural).
+  // API-Football exige `season` cuando se consulta fixtures por team sin fixture id.
+  // En Pro y gratuito, pasar team + season siempre funciona — probamos año actual
+  // y anterior para cubrir ligas europeas (Aug-May) y americanas (Jan-Dec).
   const now = new Date();
   const year = now.getFullYear();
   const candidates = [year, year - 1];
-  try {
-    const responses = await Promise.all(
-      candidates.map((season) =>
-        afCached<AfFixture[]>(
-          "/fixtures",
-          { team: teamId, season },
-          30 * 60,
-          `team-${teamId}-season-${season}`,
-        ).catch((e) => {
-          console.warn(`[fetchNextFixtureForTeam] season=${season} falló:`, e);
-          return [] as AfFixture[];
-        }),
-      ),
-    );
-    const nowMs = Date.now();
-    const upcoming = responses
-      .flat()
-      .filter((f) => {
-        const t = new Date(f.fixture.date).getTime();
-        if (Number.isNaN(t) || t < nowMs - 3 * 3600 * 1000) return false;
-        return !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short);
-      })
-      .sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
-    if (upcoming.length > 0) {
-      return { kind: "ok", fixture: buildFixture(upcoming[0]) };
-    }
-    return { kind: "empty" };
-  } catch (err) {
-    console.warn("[fetchNextFixtureForTeam] season fallback falló:", err);
-    const reason = err instanceof Error ? err.message : "API-Football no disponible";
+
+  const seasonResults = await Promise.all(
+    candidates.map((season) =>
+      afCached<AfFixture[]>(
+        "/fixtures",
+        { team: teamId, season },
+        30 * 60,
+        `team-${teamId}-season-${season}`,
+      )
+        .then((r) => ({ ok: true as const, data: r, season }))
+        .catch((e) => ({ ok: false as const, error: e, season })),
+    ),
+  );
+
+  // Si TODAS las temporadas fallaron con error, surfaceamos el primer error
+  // para que el usuario sepa si es cuota, key o timeout.
+  const allFailed = seasonResults.every((r) => !r.ok);
+  if (allFailed) {
+    const firstErr = seasonResults[0] as { ok: false; error: unknown; season: number };
+    const reason = firstErr.error instanceof Error ? firstErr.error.message : "API-Football no disponible";
     return { kind: "error", reason };
   }
+
+  const allFixtures: AfFixture[] = seasonResults.flatMap((r) => (r.ok ? r.data : []));
+  const nowMs = Date.now();
+  const upcoming = allFixtures
+    .filter((f) => {
+      const t = new Date(f.fixture.date).getTime();
+      if (Number.isNaN(t) || t < nowMs - 3 * 3600 * 1000) return false;
+      return !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short);
+    })
+    .sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
+
+  if (upcoming.length > 0) {
+    return { kind: "ok", fixture: buildFixture(upcoming[0]) };
+  }
+  return { kind: "empty" };
 }
 
 export async function fetchFixturesForLeague(leagueId: number, season: number, fromDate: string, toDate: string) {
