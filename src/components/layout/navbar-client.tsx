@@ -42,31 +42,24 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
   return (
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
-        {/* Logo con halo blanco amplio para que los colores resalten */}
-        <Link href="/" className="flex items-center gap-2.5">
+        {/* Logo + EL PARLEY con difuminado blanco como backdrop (detrás) */}
+        <Link href="/" className="relative flex items-center gap-2.5">
+          {/* Halo blanco detrás del logo y el texto — no altera sus colores */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-24 w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/55 blur-2xl"
+          />
           <Image
             src="/logo.png"
             alt="El Parley"
             width={161}
             height={46}
-            className="h-[46px] w-auto"
+            className="relative h-[46px] w-auto"
             priority
-            style={{
-              filter: [
-                "drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))",
-                "drop-shadow(0 0 14px rgba(255, 255, 255, 0.8))",
-                "drop-shadow(0 0 26px rgba(255, 255, 255, 0.6))",
-                "drop-shadow(0 0 42px rgba(255, 255, 255, 0.35))",
-              ].join(" "),
-            }}
           />
           <span
-            className="text-xl font-bold tracking-wide"
-            style={{
-              color: "#3D5A3E",
-              textShadow:
-                "0 0 8px rgba(255, 255, 255, 0.95), 0 0 18px rgba(255, 255, 255, 0.8), 0 0 32px rgba(255, 255, 255, 0.55)",
-            }}
+            className="relative text-xl font-bold tracking-wide"
+            style={{ color: "#3D5A3E" }}
           >
             EL PARLEY
           </span>
@@ -135,29 +128,21 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
             className="w-full border-border bg-background sm:max-w-sm"
           >
             <SheetHeader className="border-b border-border pb-4">
-              <SheetTitle className="flex items-center gap-2.5">
+              <SheetTitle className="relative flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-20 w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/55 blur-2xl"
+                />
                 <Image
                   src="/logo.png"
                   alt="El Parley"
                   width={138}
                   height={41}
-                  className="h-[41px] w-auto"
-                  style={{
-                    filter: [
-                      "drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))",
-                      "drop-shadow(0 0 12px rgba(255, 255, 255, 0.8))",
-                      "drop-shadow(0 0 22px rgba(255, 255, 255, 0.6))",
-                      "drop-shadow(0 0 36px rgba(255, 255, 255, 0.35))",
-                    ].join(" "),
-                  }}
+                  className="relative h-[41px] w-auto"
                 />
                 <span
-                  className="text-lg font-bold tracking-wide"
-                  style={{
-                    color: "#3D5A3E",
-                    textShadow:
-                      "0 0 7px rgba(255, 255, 255, 0.95), 0 0 15px rgba(255, 255, 255, 0.8), 0 0 28px rgba(255, 255, 255, 0.55)",
-                  }}
+                  className="relative text-lg font-bold tracking-wide"
+                  style={{ color: "#3D5A3E" }}
                 >
                   EL PARLEY
                 </span>

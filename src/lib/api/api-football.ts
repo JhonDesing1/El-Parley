@@ -213,16 +213,35 @@ async function afCached<T = any>(
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
-  const res = await fetch(url.toString(), {
-    headers: headers(),
-    next: { revalidate: revalidateSec, ...(tag ? { tags: [tag] } : {}) },
-  });
-  if (!res.ok) throw new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
-  const json = await res.json();
-  if (json.errors && Object.keys(json.errors).length > 0) {
-    throw new Error(`API-Football error: ${JSON.stringify(json.errors)}`);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        headers: headers(),
+        next: { revalidate: revalidateSec, ...(tag ? { tags: [tag] } : {}) },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        if (!isRetryable(res.status) || attempt === MAX_ATTEMPTS) {
+          throw new Error(`API-Football ${path} -> ${res.status} ${res.statusText}`);
+        }
+        lastError = new Error(`HTTP ${res.status}`);
+      } else {
+        const json = await res.json();
+        if (json.errors && Object.keys(json.errors).length > 0) {
+          // errors.requests = "daily limit" es determinista, no reintentamos
+          throw new Error(`API-Football error: ${JSON.stringify(json.errors)}`);
+        }
+        return json.response as T;
+      }
+    } catch (err) {
+      lastError = err;
+      if (attempt === MAX_ATTEMPTS) break;
+    }
+    // backoff suave — 500ms, 1500ms
+    await new Promise((r) => setTimeout(r, 500 * attempt * (1 + Math.random() * 0.3)));
   }
-  return json.response as T;
+  throw lastError instanceof Error ? lastError : new Error("API-Football no disponible");
 }
 
 export interface NextFixtureForTeam {

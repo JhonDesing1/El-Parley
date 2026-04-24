@@ -355,11 +355,32 @@ function TeamDashboard({
             <CalendarClock className="h-8 w-8 text-muted-foreground" />
             {noMatchReason === "error" ? (
               <>
-                <p className="font-semibold">No pudimos consultar API-Football</p>
+                <p className="font-semibold">
+                  {(() => {
+                    const e = (noMatchError ?? "").toLowerCase();
+                    if (e.includes("api_football_key") || e.includes("no configurada")) {
+                      return "API-Football no está configurada";
+                    }
+                    if (e.includes("daily limit") || e.includes("requests") || e.includes("429")) {
+                      return "Cupo diario de API-Football agotado";
+                    }
+                    if (e.includes("timeout") || e.includes("aborterror")) {
+                      return "API-Football tardó demasiado en responder";
+                    }
+                    return "No pudimos consultar API-Football";
+                  })()}
+                </p>
                 <p className="max-w-md text-sm text-muted-foreground">
-                  El servicio de datos no respondió a tiempo. Intenta de nuevo en
-                  unos minutos — si persiste, puede que el cupo diario esté
-                  agotado.
+                  {(() => {
+                    const e = (noMatchError ?? "").toLowerCase();
+                    if (e.includes("api_football_key") || e.includes("no configurada")) {
+                      return "Falta la variable de entorno en Vercel. Una vez configurada, el análisis funcionará automáticamente.";
+                    }
+                    if (e.includes("daily limit") || e.includes("requests") || e.includes("429")) {
+                      return "Hemos alcanzado el límite de consultas diarias del plan gratuito. Se restablecerá mañana.";
+                    }
+                    return "Intenta de nuevo en unos minutos. El servicio de datos responde lento temporalmente.";
+                  })()}
                 </p>
                 {noMatchError && (
                   <p className="mt-1 max-w-md text-[11px] text-muted-foreground/70">
