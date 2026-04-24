@@ -95,6 +95,10 @@ export default async function AnalisisPage({
   // true si el fixture viene sólo de API-Football (aún no está en nuestra BD):
   // en ese caso no podemos linkear a /partido/:id porque devolvería 404
   let matchInDb = false;
+  // Motivo por el que no hay próximo partido — diferenciamos entre
+  // "API dice que no hay fixture" y "fallo de red / config".
+  let noMatchReason: "empty" | "error" | null = null;
+  let noMatchError: string | null = null;
   if (hasTeam) {
     const { data: teamRow } = await supabase
       .from("teams")
@@ -125,8 +129,9 @@ export default async function AnalisisPage({
       // Fallback: si la BD aún no tiene el fixture (liga fuera del cron),
       // lo pedimos a API-Football y derivamos los xG desde /predictions.
       if (!nextMatch) {
-        const af = await fetchNextFixtureForTeam(teamId);
-        if (af && (af.status === "scheduled" || af.status === "live")) {
+        const result = await fetchNextFixtureForTeam(teamId);
+        if (result.kind === "ok") {
+          const af = result.fixture;
           const preds = await fetchPredictionsForFixture(af.id, af.leagueId);
           nextMatch = {
             id: af.id,
@@ -154,6 +159,11 @@ export default async function AnalisisPage({
               logo_url: af.leagueLogo,
             },
           };
+        } else if (result.kind === "empty") {
+          noMatchReason = "empty";
+        } else {
+          noMatchReason = "error";
+          noMatchError = result.reason;
         }
       }
     }
@@ -204,6 +214,8 @@ export default async function AnalisisPage({
           team={selectedTeam}
           nextMatch={nextMatch}
           matchInDb={matchInDb}
+          noMatchReason={noMatchReason}
+          noMatchError={noMatchError}
         />
       )}
 
@@ -297,10 +309,14 @@ function TeamDashboard({
   team,
   nextMatch,
   matchInDb,
+  noMatchReason,
+  noMatchError,
 }: {
   team: RawTeam;
   nextMatch: RawMatchRow | null;
   matchInDb: boolean;
+  noMatchReason: "empty" | "error" | null;
+  noMatchError: string | null;
 }) {
   return (
     <div className="space-y-6">
@@ -337,11 +353,30 @@ function TeamDashboard({
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
             <CalendarClock className="h-8 w-8 text-muted-foreground" />
-            <p className="font-semibold">Sin partidos programados</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              No encontramos un próximo partido de {team.name} en las ligas que
-              cubrimos. Vuelve más adelante cuando haya fixture confirmado.
-            </p>
+            {noMatchReason === "error" ? (
+              <>
+                <p className="font-semibold">No pudimos consultar API-Football</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  El servicio de datos no respondió a tiempo. Intenta de nuevo en
+                  unos minutos — si persiste, puede que el cupo diario esté
+                  agotado.
+                </p>
+                {noMatchError && (
+                  <p className="mt-1 max-w-md text-[11px] text-muted-foreground/70">
+                    Detalle: {noMatchError}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Sin partidos programados</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  API-Football no tiene un próximo fixture confirmado para{" "}
+                  {team.name} en este momento. Las ligas publican el calendario
+                  semanas antes, vuelve a intentarlo en unos días.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

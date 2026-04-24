@@ -238,38 +238,79 @@ export interface NextFixtureForTeam {
   away: { id: number; name: string; logo: string | null };
 }
 
+export type NextFixtureResult =
+  | { kind: "ok"; fixture: NextFixtureForTeam }
+  | { kind: "empty" }            // API respondió OK pero no hay fixture programado
+  | { kind: "error"; reason: string }; // fallo de red/config (key, cuota, 5xx)
+
+function buildFixture(f: AfFixture): NextFixtureForTeam {
+  return {
+    id: f.fixture.id,
+    kickoff: f.fixture.date,
+    status: mapStatus(f.fixture.status.short),
+    venue: f.fixture.venue.name,
+    leagueId: f.league.id,
+    leagueName: f.league.name ?? "",
+    leagueCountry: f.league.country ?? null,
+    leagueLogo: f.league.logo ?? null,
+    home: { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo },
+    away: { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo },
+  };
+}
+
 /**
  * Próximo partido confirmado de un equipo — usado por /analisis como fallback
  * cuando la BD aún no lo tiene sincronizado (liga fuera del set high-priority).
- * Cachea 30 min para respetar el cupo de 100 req/día.
  *
- * Devuelve `null` si API-Football no tiene fixture programado.
+ * Estrategia:
+ *   1) `next=1`  → el endpoint clásico. Rápido y suele responder.
+ *   2) Si eso devuelve 0 o falla (p. ej. temporada recién cerrada), se hace
+ *      un barrido `from/to` de los próximos 60 días filtrando por team_id
+ *      a través de las ligas populares, tomando la fecha más próxima.
+ *
+ * Cachea 30 min por team para respetar el cupo de 100 req/día.
  */
-export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtureForTeam | null> {
+export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtureResult> {
   try {
     const response = await afCached<AfFixture[]>(
       "/fixtures",
       { team: teamId, next: 1 },
-      30 * 60, // 30 minutos
+      30 * 60,
       `team-${teamId}-next`,
     );
-    if (!response.length) return null;
-    const f = response[0];
-    return {
-      id: f.fixture.id,
-      kickoff: f.fixture.date,
-      status: mapStatus(f.fixture.status.short),
-      venue: f.fixture.venue.name,
-      leagueId: f.league.id,
-      leagueName: f.league.name ?? "",
-      leagueCountry: f.league.country ?? null,
-      leagueLogo: f.league.logo ?? null,
-      home: { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo },
-      away: { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo },
-    };
+    if (response.length > 0) {
+      return { kind: "ok", fixture: buildFixture(response[0]) };
+    }
   } catch (err) {
-    console.warn("[fetchNextFixtureForTeam] falló:", err);
-    return null;
+    console.warn("[fetchNextFixtureForTeam] next=1 falló:", err);
+    const reason = err instanceof Error ? err.message : "API-Football no disponible";
+    // Seguimos al fallback — puede que next=1 tenga un hiccup puntual.
+    return { kind: "error", reason };
+  }
+
+  // Fallback: ventana de 60 días para ligas en las que el equipo participa.
+  try {
+    const now = new Date();
+    const in60d = new Date(now.getTime() + 60 * 86400 * 1000);
+    const from = now.toISOString().slice(0, 10);
+    const to = in60d.toISOString().slice(0, 10);
+    const response = await afCached<AfFixture[]>(
+      "/fixtures",
+      { team: teamId, from, to },
+      30 * 60,
+      `team-${teamId}-window`,
+    );
+    const upcoming = response
+      .filter((f) => !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short))
+      .sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
+    if (upcoming.length > 0) {
+      return { kind: "ok", fixture: buildFixture(upcoming[0]) };
+    }
+    return { kind: "empty" };
+  } catch (err) {
+    console.warn("[fetchNextFixtureForTeam] window falló:", err);
+    const reason = err instanceof Error ? err.message : "API-Football no disponible";
+    return { kind: "error", reason };
   }
 }
 
