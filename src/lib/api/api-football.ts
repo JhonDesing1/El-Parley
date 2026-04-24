@@ -307,27 +307,41 @@ export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtu
     return { kind: "error", reason };
   }
 
-  // Fallback: ventana de 60 días para ligas en las que el equipo participa.
+  // Fallback: por temporada. API-Football exige `season` cuando se consulta
+  // fixtures por team sin `next/last`. Probamos año actual y anterior para
+  // cubrir tanto ligas europeas (2025-26) como americanas (calendario natural).
+  const now = new Date();
+  const year = now.getFullYear();
+  const candidates = [year, year - 1];
   try {
-    const now = new Date();
-    const in60d = new Date(now.getTime() + 60 * 86400 * 1000);
-    const from = now.toISOString().slice(0, 10);
-    const to = in60d.toISOString().slice(0, 10);
-    const response = await afCached<AfFixture[]>(
-      "/fixtures",
-      { team: teamId, from, to },
-      30 * 60,
-      `team-${teamId}-window`,
+    const responses = await Promise.all(
+      candidates.map((season) =>
+        afCached<AfFixture[]>(
+          "/fixtures",
+          { team: teamId, season },
+          30 * 60,
+          `team-${teamId}-season-${season}`,
+        ).catch((e) => {
+          console.warn(`[fetchNextFixtureForTeam] season=${season} falló:`, e);
+          return [] as AfFixture[];
+        }),
+      ),
     );
-    const upcoming = response
-      .filter((f) => !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short))
+    const nowMs = Date.now();
+    const upcoming = responses
+      .flat()
+      .filter((f) => {
+        const t = new Date(f.fixture.date).getTime();
+        if (Number.isNaN(t) || t < nowMs - 3 * 3600 * 1000) return false;
+        return !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short);
+      })
       .sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
     if (upcoming.length > 0) {
       return { kind: "ok", fixture: buildFixture(upcoming[0]) };
     }
     return { kind: "empty" };
   } catch (err) {
-    console.warn("[fetchNextFixtureForTeam] window falló:", err);
+    console.warn("[fetchNextFixtureForTeam] season fallback falló:", err);
     const reason = err instanceof Error ? err.message : "API-Football no disponible";
     return { kind: "error", reason };
   }
