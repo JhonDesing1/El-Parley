@@ -335,6 +335,52 @@ export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtu
   return { kind: "empty" };
 }
 
+interface AfTeamSearch {
+  team: { id: number; name: string; country: string; logo: string | null };
+  venue?: { name: string | null; city: string | null };
+}
+
+/**
+ * Busca un equipo en API-Football por nombre. Útil cuando el team_id en nuestra
+ * BD no coincide con el de API-Football (filas legacy) y necesitamos recuperar
+ * el ID correcto para consultar fixtures/predictions.
+ *
+ * Cachea 7 días por nombre+país: los nombres cambian raramente.
+ */
+export async function fetchTeamByName(
+  name: string,
+  country?: string,
+): Promise<{ id: number; name: string; country: string; logo: string | null } | null> {
+  try {
+    const params: Record<string, string | number> = { search: name.slice(0, 60) };
+    if (country) params.country = country;
+    const cacheKey = `team-search-${name.toLowerCase()}-${country ?? ""}`
+      .replace(/[^a-z0-9-]/g, "-")
+      .slice(0, 120);
+    const response = await afCached<AfTeamSearch[]>(
+      "/teams",
+      params,
+      7 * 86400,
+      cacheKey,
+    );
+    if (!response.length) return null;
+
+    const needle = name.toLowerCase().trim();
+    // Exact match preferred; si no, devolvemos el primer candidato.
+    const exact = response.find((r) => r.team.name.toLowerCase() === needle);
+    const best = exact ?? response[0];
+    return {
+      id: best.team.id,
+      name: best.team.name,
+      country: best.team.country,
+      logo: best.team.logo,
+    };
+  } catch (err) {
+    console.warn("[fetchTeamByName] falló:", err);
+    return null;
+  }
+}
+
 export async function fetchFixturesForLeague(leagueId: number, season: number, fromDate: string, toDate: string) {
   const response = await af<AfFixture[]>("/fixtures", {
     league: leagueId,

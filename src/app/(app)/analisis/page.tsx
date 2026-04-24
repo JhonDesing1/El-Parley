@@ -17,6 +17,7 @@ import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import {
   fetchNextFixtureForTeam,
   fetchPredictionsForFixture,
+  fetchTeamByName,
 } from "@/lib/api/api-football";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ type RawTeam = {
   id: number;
   name: string;
   short_name: string | null;
+  country: string | null;
   logo_url: string | null;
 };
 
@@ -78,15 +80,62 @@ export default async function AnalisisPage({
   const query = (q ?? "").trim();
 
   // ── 1. Búsqueda por nombre ─────────────────────────────────────────────────
+  // Dedup por (name+country): si hay dos filas con mismo nombre y país (legacy),
+  // preferimos la que tiene partidos programados — ese es el ID correcto de API-Football.
   let searchResults: RawTeam[] = [];
   if (!hasTeam && query.length >= 2) {
     const { data } = await supabase
       .from("teams")
-      .select("id, name, short_name, logo_url")
+      .select("id, name, short_name, country, logo_url")
       .ilike("name", `%${query}%`)
       .order("name", { ascending: true })
-      .limit(12);
-    searchResults = (data ?? []) as RawTeam[];
+      .limit(30);
+    const rows = (data ?? []) as RawTeam[];
+
+    // Conteo de matches futuros por team_id para priorizar duplicados buenos
+    const ids = rows.map((r) => r.id);
+    const matchCount = new Map<number, number>();
+    if (ids.length) {
+      const nowIso = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+      const { data: mRows } = await supabase
+        .from("matches")
+        .select("home_team_id, away_team_id")
+        .gte("kickoff", nowIso)
+        .in("status", ["scheduled", "live"])
+        .or(
+          `home_team_id.in.(${ids.join(",")}),away_team_id.in.(${ids.join(",")})`,
+        );
+      for (const m of mRows ?? []) {
+        const h = (m as { home_team_id: number }).home_team_id;
+        const a = (m as { away_team_id: number }).away_team_id;
+        if (ids.includes(h)) matchCount.set(h, (matchCount.get(h) ?? 0) + 1);
+        if (ids.includes(a)) matchCount.set(a, (matchCount.get(a) ?? 0) + 1);
+      }
+    }
+
+    // Dedup: para cada (name lowercase, country) quedarnos con el row de más partidos
+    const bestByKey = new Map<string, RawTeam>();
+    for (const r of rows) {
+      const key = `${r.name.toLowerCase()}::${r.country ?? ""}`;
+      const cur = bestByKey.get(key);
+      if (!cur) {
+        bestByKey.set(key, r);
+      } else {
+        const curCount = matchCount.get(cur.id) ?? 0;
+        const newCount = matchCount.get(r.id) ?? 0;
+        if (newCount > curCount) bestByKey.set(key, r);
+      }
+    }
+
+    // Orden final: primero los que tienen partidos, luego alfabético
+    searchResults = [...bestByKey.values()]
+      .sort((a, b) => {
+        const ca = matchCount.get(a.id) ?? 0;
+        const cb = matchCount.get(b.id) ?? 0;
+        if (ca !== cb) return cb - ca;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 12);
   }
 
   // ── 2. Equipo seleccionado ──────────────────────────────────────────────────
@@ -102,7 +151,7 @@ export default async function AnalisisPage({
   if (hasTeam) {
     const { data: teamRow } = await supabase
       .from("teams")
-      .select("id, name, short_name, logo_url")
+      .select("id, name, short_name, country, logo_url")
       .eq("id", teamId)
       .single();
     selectedTeam = (teamRow ?? null) as RawTeam | null;
@@ -127,11 +176,23 @@ export default async function AnalisisPage({
       matchInDb = nextMatch != null;
 
       // Fallback: si la BD aún no tiene el fixture (liga fuera del cron),
-      // lo pedimos a API-Football y derivamos los xG desde /predictions.
+      // lo pedimos a API-Football. Si el team_id de nuestra BD no coincide con
+      // el de API-Football (filas legacy), hacemos búsqueda por nombre como
+      // segundo intento — usa el ID correcto devuelto por API-Football.
       if (!nextMatch) {
-        const result = await fetchNextFixtureForTeam(teamId);
+        let result = await fetchNextFixtureForTeam(teamId);
+        if (result.kind !== "ok" && selectedTeam) {
+          const byName = await fetchTeamByName(
+            selectedTeam.name,
+            selectedTeam.country ?? undefined,
+          );
+          if (byName && byName.id !== teamId) {
+            result = await fetchNextFixtureForTeam(byName.id);
+          }
+        }
         if (result.kind === "ok") {
           const af = result.fixture;
+          matchInDb = false;
           const preds = await fetchPredictionsForFixture(af.id, af.leagueId);
           nextMatch = {
             id: af.id,
@@ -144,12 +205,14 @@ export default async function AnalisisPage({
               id: af.home.id,
               name: af.home.name,
               short_name: null,
+              country: null,
               logo_url: af.home.logo,
             },
             away_team: {
               id: af.away.id,
               name: af.away.name,
               short_name: null,
+              country: null,
               logo_url: af.away.logo,
             },
             league: {
@@ -279,7 +342,14 @@ function SearchResults({ query, results }: { query: string; results: RawTeam[] }
             ) : (
               <div className="h-8 w-8 shrink-0 rounded bg-muted" />
             )}
-            <span className="truncate text-sm font-semibold">{t.name}</span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-semibold">{t.name}</span>
+              {t.country && (
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {t.country}
+                </span>
+              )}
+            </div>
             <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
           </Link>
         ))}
