@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("matches")
-    .select("id, league_id, model_expected_goals_home, model_expected_goals_away")
+    .select("id, league_id, home_team_id, away_team_id, model_expected_goals_home, model_expected_goals_away")
     .gte("kickoff", now.toISOString())
     .lte("kickoff", in48h.toISOString())
     .eq("status", "scheduled")
@@ -142,6 +142,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, matchesScanned: 0, valueBetsDetected: 0, timestamp: now.toISOString() });
   }
 
+  // Bulk-load team_stats para todos los equipos involucrados — evita N consultas
+  // por partido. Las medias rodantes se mantienen al día por sync-team-stats.
+  const teamIds = new Set<number>();
+  for (const m of matches) {
+    if (m.home_team_id) teamIds.add(m.home_team_id);
+    if (m.away_team_id) teamIds.add(m.away_team_id);
+  }
+
+  const teamStatsById = new Map<number, {
+    matches_sample: number;
+    avg_corners_for: number | null;
+    avg_corners_against: number | null;
+    avg_yellow_cards: number | null;
+  }>();
+
+  if (teamIds.size > 0) {
+    const { data: teamStatsRows } = await supabase
+      .from("team_stats")
+      .select("team_id, matches_sample, avg_corners_for, avg_corners_against, avg_yellow_cards")
+      .in("team_id", [...teamIds]);
+    for (const t of teamStatsRows ?? []) {
+      teamStatsById.set(t.team_id, {
+        matches_sample: t.matches_sample ?? 0,
+        avg_corners_for: t.avg_corners_for as number | null,
+        avg_corners_against: t.avg_corners_against as number | null,
+        avg_yellow_cards: t.avg_yellow_cards as number | null,
+      });
+    }
+  }
+
+  // Mínimo de partidos para confiar en la media rodante por equipo. Por debajo
+  // de este umbral usamos LEAGUE_AVG_* como antes (más estable que una muestra
+  // de 1-2 partidos).
+  const MIN_TEAM_SAMPLE = 5;
+
   let detected = 0;
 
   for (const match of matches) {
@@ -152,13 +187,48 @@ export async function GET(req: NextRequest) {
     // Probabilidades de goles (Poisson + Dixon-Coles)
     const goalProbs = calculateMatchProbabilities(xgHome, xgAway);
 
-    // Probabilidades de córners (Poisson con medias históricas por liga)
-    const cornerAvg = LEAGUE_AVG_CORNERS[leagueId] ?? DEFAULT_CORNERS;
-    const cornerProbs = calculateCornerProbabilities(cornerAvg.home, cornerAvg.away);
+    // ── Expectativas por equipo (córners + tarjetas) ─────────────────
+    // Si tenemos team_stats con muestra suficiente, las usamos; si no,
+    // caemos al promedio por liga.
+    const homeStats = match.home_team_id ? teamStatsById.get(match.home_team_id) : undefined;
+    const awayStats = match.away_team_id ? teamStatsById.get(match.away_team_id) : undefined;
+    const haveTeamCorners =
+      homeStats && awayStats &&
+      homeStats.matches_sample >= MIN_TEAM_SAMPLE &&
+      awayStats.matches_sample >= MIN_TEAM_SAMPLE &&
+      homeStats.avg_corners_for != null && homeStats.avg_corners_against != null &&
+      awayStats.avg_corners_for != null && awayStats.avg_corners_against != null;
+    const haveTeamCards =
+      homeStats && awayStats &&
+      homeStats.matches_sample >= MIN_TEAM_SAMPLE &&
+      awayStats.matches_sample >= MIN_TEAM_SAMPLE &&
+      homeStats.avg_yellow_cards != null && awayStats.avg_yellow_cards != null;
 
-    // Probabilidades de tarjetas (Poisson con medias históricas por liga)
-    const cardAvg = LEAGUE_AVG_CARDS[leagueId] ?? DEFAULT_CARDS;
-    const cardProbs = calculateCardProbabilities(cardAvg.home, cardAvg.away);
+    // Córners — combinamos lo que SUELE forzar el local con lo que SUELE
+    // conceder el visitante (y viceversa) para una expectativa específica
+    // del enfrentamiento. Promedio simple = 0.5*(for_local + against_visit).
+    const cornerLeagueAvg = LEAGUE_AVG_CORNERS[leagueId] ?? DEFAULT_CORNERS;
+    const cornerHomeExpected = haveTeamCorners
+      ? (homeStats!.avg_corners_for! + awayStats!.avg_corners_against!) / 2
+      : cornerLeagueAvg.home;
+    const cornerAwayExpected = haveTeamCorners
+      ? (awayStats!.avg_corners_for! + homeStats!.avg_corners_against!) / 2
+      : cornerLeagueAvg.away;
+    const cornerProbs = calculateCornerProbabilities(cornerHomeExpected, cornerAwayExpected);
+
+    // Tarjetas — el promedio de amarillas que SUELE recibir cada equipo
+    // depende mucho más del estilo del propio equipo que del rival, así
+    // que basta con su media.
+    const cardLeagueAvg = LEAGUE_AVG_CARDS[leagueId] ?? DEFAULT_CARDS;
+    const cardHomeExpected = haveTeamCards ? homeStats!.avg_yellow_cards! : cardLeagueAvg.home;
+    const cardAwayExpected = haveTeamCards ? awayStats!.avg_yellow_cards! : cardLeagueAvg.away;
+    const cardProbs = calculateCardProbabilities(cardHomeExpected, cardAwayExpected);
+
+    // Para reasoning de córners y tarjetas usamos las expectativas reales
+    // (no los averages) — así el mensaje muestra los números que sustentan
+    // el cálculo, sean por equipo o por liga.
+    const cornerAvg = { home: cornerHomeExpected, away: cornerAwayExpected };
+    const cardAvg   = { home: cardHomeExpected,   away: cardAwayExpected   };
 
     const { data: odds } = await supabase
       .from("odds")

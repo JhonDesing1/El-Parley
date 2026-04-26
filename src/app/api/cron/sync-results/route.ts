@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchFixtureById, fetchFixtureStatistics } from "@/lib/api/api-football";
+import {
+  fetchFixtureById,
+  fetchFixtureStatistics,
+  type FixtureStatistics,
+} from "@/lib/api/api-football";
 import { sendTelegramMessage, notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +25,7 @@ export const maxDuration = 60;
  * combos (1x2, over_under_2_5, btts). Others stay pending for manual resolution.
  */
 
-interface MatchStats {
-  totalCorners: number | null;
-  totalYellowCards: number | null;
-}
+type MatchStats = Pick<FixtureStatistics, "totalCorners" | "totalYellowCards">;
 
 /**
  * Devuelve el resultado de la apuesta dado el marcador final + stats
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
 
   const { data: candidates, error } = await supabase
     .from("matches")
-    .select("id, status, home_score, away_score")
+    .select("id, status, home_score, away_score, home_team_id, away_team_id")
     .or(
       [
         "status.eq.live",
@@ -157,6 +158,8 @@ export async function GET(req: NextRequest) {
       // Stats del partido (córners + amarillas) — se cargan perezosamente
       // solo si encontramos bets pendientes en mercados que las requieren,
       // para no quemar requests del API en partidos sin bets de córners/cards.
+      // Cuando se cargan, se persiste también en match_stats para que el cron
+      // diario sync-team-stats pueda calcular medias rodantes por equipo.
       let matchStats: MatchStats | null = null;
       let statsAttempted = false;
       const ensureStats = async (): Promise<MatchStats | null> => {
@@ -164,7 +167,28 @@ export async function GET(req: NextRequest) {
         statsAttempted = true;
         if (isVoid) return null; // partido cancelado: no hay stats que pedir
         try {
-          matchStats = await fetchFixtureStatistics(match.id);
+          const full = await fetchFixtureStatistics(match.id);
+          matchStats = full;
+
+          if (full && match.home_team_id && match.away_team_id) {
+            const home = full.perTeam.find((t) => t.teamId === match.home_team_id);
+            const away = full.perTeam.find((t) => t.teamId === match.away_team_id);
+            if (home || away) {
+              await supabase.from("match_stats").upsert(
+                {
+                  match_id: match.id,
+                  home_corners: home?.corners ?? null,
+                  away_corners: away?.corners ?? null,
+                  home_yellow_cards: home?.yellowCards ?? null,
+                  away_yellow_cards: away?.yellowCards ?? null,
+                  home_red_cards: home?.redCards ?? null,
+                  away_red_cards: away?.redCards ?? null,
+                  fetched_at: new Date().toISOString(),
+                },
+                { onConflict: "match_id" },
+              );
+            }
+          }
         } catch (e) {
           console.error("[sync-results] stats failed for", match.id, e);
           matchStats = null;

@@ -130,6 +130,45 @@ function parseOverUnder(v: string, allowedLines: number[]): { dir: "over" | "und
   return { dir: m[1].toLowerCase() as "over" | "under", lineVal };
 }
 
+const CORNER_BET_NAMES = [
+  "Corners Over Under",
+  "Corners Over/Under",
+  "Total Corners",
+  "Total - Corners",
+  "Asian Corners",
+  "Asian Total Corners",
+  "Corners 1x2 (Total)",
+];
+
+const CARD_BET_NAMES = [
+  "Cards Over/Under",
+  "Cards Over Under",
+  "Total Cards",
+  "Total Yellow Cards",
+  "Yellow Cards",
+  "Yellow Over/Under",
+  "Booking Points Over/Under",
+  "Total Bookings",
+];
+
+function buildCornerAliases(): Record<string, OddsMapping> {
+  const parser: OddsMapping = (v) => {
+    const parsed = parseOverUnder(v, [8.5, 9.5, 10.5]);
+    if (!parsed) return null;
+    return { market: "corners_over_under", selection: parsed.dir, line: parsed.lineVal };
+  };
+  return Object.fromEntries(CORNER_BET_NAMES.map((name) => [name, parser]));
+}
+
+function buildCardAliases(): Record<string, OddsMapping> {
+  const parser: OddsMapping = (v) => {
+    const parsed = parseOverUnder(v, [3.5, 4.5]);
+    if (!parsed) return null;
+    return { market: "cards_over_under", selection: parsed.dir, line: parsed.lineVal };
+  };
+  return Object.fromEntries(CARD_BET_NAMES.map((name) => [name, parser]));
+}
+
 const MARKET_MAP: Record<string, OddsMapping> = {
   // ── Resultado 1X2 ──────────────────────────────────────────────────────────
   "Match Winner": (v) => {
@@ -160,29 +199,13 @@ const MARKET_MAP: Record<string, OddsMapping> = {
   },
 
   // ── Córners Over/Under (líneas 8.5, 9.5 y 10.5) ──────────────────────────
-  "Corners Over Under": (v) => {
-    const parsed = parseOverUnder(v, [8.5, 9.5, 10.5]);
-    if (!parsed) return null;
-    return { market: "corners_over_under", selection: parsed.dir, line: parsed.lineVal };
-  },
-  // Alias que algunos bookmakers usan
-  "Total Corners": (v) => {
-    const parsed = parseOverUnder(v, [8.5, 9.5, 10.5]);
-    if (!parsed) return null;
-    return { market: "corners_over_under", selection: parsed.dir, line: parsed.lineVal };
-  },
+  // Registrado bajo múltiples nombres porque API-Football los envía distintos
+  // según la casa: bet365 usa "Corners Over Under", Pinnacle "Total Corners",
+  // 1xBet "Corners 1x2 (Total)", etc.
+  ...buildCornerAliases(),
 
   // ── Tarjetas amarillas Over/Under (líneas 3.5 y 4.5) ─────────────────────
-  "Cards Over/Under": (v) => {
-    const parsed = parseOverUnder(v, [3.5, 4.5]);
-    if (!parsed) return null;
-    return { market: "cards_over_under", selection: parsed.dir, line: parsed.lineVal };
-  },
-  "Yellow Cards": (v) => {
-    const parsed = parseOverUnder(v, [3.5, 4.5]);
-    if (!parsed) return null;
-    return { market: "cards_over_under", selection: parsed.dir, line: parsed.lineVal };
-  },
+  ...buildCardAliases(),
 
   // ── Hándicap asiático (solo líneas X.5 — sin push) ───────────────────────
   "Asian Handicap": (v) => {
@@ -630,35 +653,59 @@ interface AfTeamStat {
   statistics: Array<{ type: string; value: number | string | null }>;
 }
 
-export async function fetchFixtureStatistics(fixtureId: number): Promise<{
+export interface TeamStatBreakdown {
+  teamId: number;
+  corners: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+}
+
+export interface FixtureStatistics {
   totalCorners: number | null;
   totalYellowCards: number | null;
   totalRedCards: number | null;
-} | null> {
+  perTeam: TeamStatBreakdown[];
+}
+
+export async function fetchFixtureStatistics(
+  fixtureId: number,
+): Promise<FixtureStatistics | null> {
   const response = await af<AfTeamStat[]>("/fixtures/statistics", {
     fixture: fixtureId,
   });
   if (!response?.length) return null;
 
-  const sumStat = (typeName: string): number | null => {
+  const readStat = (team: AfTeamStat, typeName: string): number | null => {
+    const entry = team.statistics?.find((s) => s.type === typeName);
+    if (!entry || entry.value == null) return null;
+    const n = typeof entry.value === "number" ? entry.value : Number(entry.value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const perTeam: TeamStatBreakdown[] = response.map((team) => ({
+    teamId: team.team.id,
+    corners: readStat(team, "Corner Kicks"),
+    yellowCards: readStat(team, "Yellow Cards"),
+    redCards: readStat(team, "Red Cards"),
+  }));
+
+  const sumOrNull = (key: keyof Omit<TeamStatBreakdown, "teamId">): number | null => {
     let total = 0;
     let found = false;
-    for (const team of response) {
-      const entry = team.statistics?.find((s) => s.type === typeName);
-      if (!entry || entry.value == null) continue;
-      const n = typeof entry.value === "number" ? entry.value : Number(entry.value);
-      if (Number.isFinite(n)) {
-        total += n;
-        found = true;
-      }
+    for (const t of perTeam) {
+      const v = t[key];
+      if (v == null) continue;
+      total += v;
+      found = true;
     }
     return found ? total : null;
   };
 
   return {
-    totalCorners: sumStat("Corner Kicks"),
-    totalYellowCards: sumStat("Yellow Cards"),
-    totalRedCards: sumStat("Red Cards"),
+    totalCorners: sumOrNull("corners"),
+    totalYellowCards: sumOrNull("yellowCards"),
+    totalRedCards: sumOrNull("redCards"),
+    perTeam,
   };
 }
 

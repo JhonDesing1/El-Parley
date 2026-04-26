@@ -456,6 +456,47 @@ export type Database = {
           },
         ]
       }
+      match_stats: {
+        Row: {
+          match_id: number
+          home_corners: number | null
+          away_corners: number | null
+          home_yellow_cards: number | null
+          away_yellow_cards: number | null
+          home_red_cards: number | null
+          away_red_cards: number | null
+          fetched_at: string
+        }
+        Insert: {
+          match_id: number
+          home_corners?: number | null
+          away_corners?: number | null
+          home_yellow_cards?: number | null
+          away_yellow_cards?: number | null
+          home_red_cards?: number | null
+          away_red_cards?: number | null
+          fetched_at?: string
+        }
+        Update: {
+          match_id?: number
+          home_corners?: number | null
+          away_corners?: number | null
+          home_yellow_cards?: number | null
+          away_yellow_cards?: number | null
+          home_red_cards?: number | null
+          away_red_cards?: number | null
+          fetched_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_stats_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       news: {
         Row: {
           author: string | null
@@ -887,6 +928,44 @@ export type Database = {
           venue?: string | null
         }
         Relationships: []
+      }
+      team_stats: {
+        Row: {
+          team_id: number
+          matches_sample: number
+          avg_corners_for: number | null
+          avg_corners_against: number | null
+          avg_yellow_cards: number | null
+          avg_red_cards: number | null
+          updated_at: string
+        }
+        Insert: {
+          team_id: number
+          matches_sample?: number
+          avg_corners_for?: number | null
+          avg_corners_against?: number | null
+          avg_yellow_cards?: number | null
+          avg_red_cards?: number | null
+          updated_at?: string
+        }
+        Update: {
+          team_id?: number
+          matches_sample?: number
+          avg_corners_for?: number | null
+          avg_corners_against?: number | null
+          avg_yellow_cards?: number | null
+          avg_red_cards?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_stats_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: true
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tipster_picks: {
         Row: {
