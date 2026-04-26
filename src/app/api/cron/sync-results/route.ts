@@ -21,22 +21,47 @@ export const maxDuration = 60;
  * combos (1x2, over_under_2_5, btts). Others stay pending for manual resolution.
  */
 
+/**
+ * Devuelve el resultado de la apuesta dado el marcador final, o `null`
+ * si el mercado no es resoluble únicamente con goles (ej. córners,
+ * tarjetas — que requieren stats adicionales que aún no traemos).
+ *
+ * Devolver `null` evita marcar como "perdido" un bet que en realidad
+ * podría haber ganado: el bet queda pendiente y se resuelve manualmente
+ * o cuando carguemos las stats correspondientes.
+ */
 function resolveOutcome(
   market: string,
   selection: string,
   homeScore: number,
   awayScore: number,
-): "won" | "lost" {
+): "won" | "lost" | null {
+  const total = homeScore + awayScore;
   const key = `${market}:${selection}`;
   switch (key) {
+    // 1x2 — legacy, ya no generamos pero puede haber bets viejos pendientes
     case "1x2:home":               return homeScore > awayScore ? "won" : "lost";
     case "1x2:draw":               return homeScore === awayScore ? "won" : "lost";
     case "1x2:away":               return awayScore > homeScore ? "won" : "lost";
-    case "over_under_2_5:over":    return homeScore + awayScore >= 3 ? "won" : "lost";
-    case "over_under_2_5:under":   return homeScore + awayScore <= 2 ? "won" : "lost";
+
+    // Cantidad de goles
+    case "over_under_1_5:over":    return total >= 2 ? "won" : "lost";
+    case "over_under_1_5:under":   return total <= 1 ? "won" : "lost";
+    case "over_under_2_5:over":    return total >= 3 ? "won" : "lost";
+    case "over_under_2_5:under":   return total <= 2 ? "won" : "lost";
+    case "over_under_3_5:over":    return total >= 4 ? "won" : "lost";
+    case "over_under_3_5:under":   return total <= 3 ? "won" : "lost";
+
+    // Eventos del partido
     case "btts:yes":               return homeScore > 0 && awayScore > 0 ? "won" : "lost";
     case "btts:no":                return homeScore === 0 || awayScore === 0 ? "won" : "lost";
-    default:                       return "lost";
+    case "double_chance:1x":       return homeScore >= awayScore ? "won" : "lost";
+    case "double_chance:12":       return homeScore !== awayScore ? "won" : "lost";
+    case "double_chance:x2":       return awayScore >= homeScore ? "won" : "lost";
+
+    // Córners y tarjetas: requieren stats que aún no traemos del API.
+    // Dejamos el bet pendiente para resolución manual.
+    default:                       return null;
   }
 }
 
@@ -113,9 +138,11 @@ export async function GET(req: NextRequest) {
 
       if (pendingBets?.length) {
         for (const bet of pendingBets) {
-          const result = isVoid
-            ? "void"
-            : resolveOutcome(bet.market, bet.selection, homeScore, awayScore);
+          let result: "won" | "lost" | "void" | null;
+          if (isVoid) result = "void";
+          else result = resolveOutcome(bet.market, bet.selection, homeScore, awayScore);
+
+          if (result === null) continue; // mercado no resoluble (córners/tarjetas)
 
           await supabase
             .from("value_bets")
@@ -135,9 +162,11 @@ export async function GET(req: NextRequest) {
 
       if (pendingPicks?.length) {
         for (const pick of pendingPicks) {
-          const result = isVoid
-            ? ("void" as const)
-            : resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+          let result: "won" | "lost" | "void" | null;
+          if (isVoid) result = "void";
+          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+
+          if (result === null) continue;
 
           const profitLoss =
             result === "void" || pick.stake == null
@@ -188,9 +217,11 @@ export async function GET(req: NextRequest) {
           const combo = `${pick.market}:${pick.selection}`;
           if (!KNOWN_COMBOS.has(combo)) continue; // leave for manual resolution
 
-          const result = isVoid
-            ? "void"
-            : resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+          let result: "won" | "lost" | "void" | null;
+          if (isVoid) result = "void";
+          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+
+          if (result === null) continue;
 
           await supabase
             .from("tipster_picks")
@@ -210,9 +241,11 @@ export async function GET(req: NextRequest) {
 
       if (pendingParlayLegs?.length) {
         for (const leg of pendingParlayLegs) {
-          const result = isVoid
-            ? "void"
-            : resolveOutcome(leg.market, leg.selection, homeScore, awayScore);
+          let result: "won" | "lost" | "void" | null;
+          if (isVoid) result = "void";
+          else result = resolveOutcome(leg.market, leg.selection, homeScore, awayScore);
+
+          if (result === null) continue;
 
           await supabase
             .from("parlay_legs")

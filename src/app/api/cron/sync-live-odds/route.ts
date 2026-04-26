@@ -26,25 +26,37 @@ export const maxDuration = 60;
  * The regular sync-odds cron (@10min) continues to handle the rest of the schedule.
  */
 
+// Mercados enfocados: cantidad de goles y eventos del partido.
+// Para córners y tarjetas usamos el cron de 10 min (detect-value-bets) que
+// dispone de las medias por liga; aquí priorizamos lo que cambia con la
+// cuota en vivo.
 type MarketKey =
-  | "1x2:home"
-  | "1x2:draw"
-  | "1x2:away"
+  | "over_under_1_5:over"
+  | "over_under_1_5:under"
   | "over_under_2_5:over"
   | "over_under_2_5:under"
+  | "over_under_3_5:over"
+  | "over_under_3_5:under"
   | "btts:yes"
-  | "btts:no";
+  | "btts:no"
+  | "double_chance:1x"
+  | "double_chance:12"
+  | "double_chance:x2";
 
 type MatchProbs = ReturnType<typeof calculateMatchProbabilities>;
 
 const MARKET_PROB: Record<MarketKey, (p: MatchProbs) => number> = {
-  "1x2:home": (p) => p.home,
-  "1x2:draw": (p) => p.draw,
-  "1x2:away": (p) => p.away,
-  "over_under_2_5:over": (p) => p.over25,
+  "over_under_1_5:over":  (p) => p.over15,
+  "over_under_1_5:under": (p) => p.under15,
+  "over_under_2_5:over":  (p) => p.over25,
   "over_under_2_5:under": (p) => p.under25,
-  "btts:yes": (p) => p.btts,
-  "btts:no": (p) => p.noBtts,
+  "over_under_3_5:over":  (p) => p.over35,
+  "over_under_3_5:under": (p) => p.under35,
+  "btts:yes":             (p) => p.btts,
+  "btts:no":              (p) => p.noBtts,
+  "double_chance:1x":     (p) => p.dc1x,
+  "double_chance:12":     (p) => p.dc12,
+  "double_chance:x2":     (p) => p.dcx2,
 };
 
 export async function GET(req: NextRequest) {

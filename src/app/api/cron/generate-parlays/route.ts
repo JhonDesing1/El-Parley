@@ -147,6 +147,19 @@ export async function GET(req: NextRequest) {
   const matchIds = matches.map((m) => m.id);
   const matchMap = new Map(matches.map((m) => [m.id, m as unknown as MatchRow]));
 
+  // Mercados permitidos en combinadas: enfocadas en cantidad de goles,
+  // esquinas, amarillas y eventos del partido. Excluye explícitamente 1x2
+  // y hándicap asiático aun si quedaran bets viejos en la BD.
+  const ALLOWED_PARLAY_MARKETS: MarketType[] = [
+    "over_under_1_5",
+    "over_under_2_5",
+    "over_under_3_5",
+    "btts",
+    "double_chance",
+    "corners_over_under",
+    "cards_over_under",
+  ];
+
   // Pending value bets for those matches (medium or high confidence only)
   const { data: valueBets, error: vbErr } = await supabase
     .from("value_bets")
@@ -155,6 +168,7 @@ export async function GET(req: NextRequest) {
     )
     .eq("result", "pending")
     .in("confidence", ["medium", "high"])
+    .in("market", ALLOWED_PARLAY_MARKETS)
     .in("match_id", matchIds);
 
   if (vbErr) {

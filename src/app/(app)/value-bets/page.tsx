@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Lock, TrendingUp, Target, Zap, ChevronRight, AlertTriangle, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database";
 import { isPremiumUser } from "@/lib/utils/auth";
 import { clampDisplayProb } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/badge";
@@ -18,14 +19,19 @@ export const metadata: Metadata = {
 export const revalidate = 0;
 
 const MARKET_LABELS: Record<string, string> = {
-  "1x2": "1X2",
   btts: "Ambos anotan",
-  over_under_2_5: "+/- 2.5 goles",
   over_under_1_5: "+/- 1.5 goles",
+  over_under_2_5: "+/- 2.5 goles",
+  over_under_3_5: "+/- 3.5 goles",
   double_chance: "Doble oportunidad",
-  draw_no_bet: "Empate anula",
-  asian_handicap: "Handicap asiático",
+  corners_over_under: "Córners",
+  cards_over_under: "Tarjetas amarillas",
 };
+
+// Mercados que aparecen en /value-bets — sin 1x2 ni hándicap asiático.
+const ALLOWED_MARKETS = Object.keys(
+  MARKET_LABELS,
+) as Database["public"]["Enums"]["market_type"][];
 
 const SELECTION_LABELS: Record<string, string> = {
   home: "Local gana",
@@ -75,6 +81,7 @@ export default async function RecomendadosPage() {
     .gte("match.kickoff" as never, now.toISOString())
     .lte("match.kickoff" as never, in48h.toISOString())
     .in("confidence", ["high", "medium"])
+    .in("market", ALLOWED_MARKETS)
     .order("model_prob", { ascending: false });
 
   if (!isPremium) query = query.eq("is_premium", false);

@@ -4,7 +4,6 @@ import {
   calculateMatchProbabilities,
   calculateCornerProbabilities,
   calculateCardProbabilities,
-  calculateHandicapProbability,
   type CornerProbabilities,
   type CardProbabilities,
 } from "@/lib/betting/poisson";
@@ -24,21 +23,21 @@ export const maxDuration = 60;
 /**
  * Vercel Cron — corre cada 10 minutos (schedule: cada 10 min en vercel.json).
  *
- * Mercados soportados:
- *  - Goles: 1x2, over/under 1.5/2.5/3.5, BTTS, doble oportunidad
+ * Mercados soportados (enfocados en cantidad de goles, esquinas, amarillas y
+ * eventos del partido — excluimos 1x2 y hándicap asiático):
+ *  - Goles: over/under 1.5/2.5/3.5
+ *  - Eventos: BTTS (ambos anotan), doble oportunidad
  *  - Córners: over/under 8.5/9.5/10.5 (modelo Poisson con medias por liga)
  *  - Tarjetas: over/under 3.5/4.5 (modelo Poisson con medias por liga)
- *  - Hándicap asiático: líneas X.5 derivadas de la matriz de marcadores
  *
  * Exclusión: matches de HIGH_PRIORITY_LEAGUE_IDS con kickoff en <2h son
  * manejados por sync-live-odds (cada 5 min) para evitar race conditions en
  * el delete+insert de value_bets.
  */
 
-// ── Mercados de goles ─────────────────────────────────────────────────────────
+// ── Mercados de goles + eventos ──────────────────────────────────────────────
 
 type GoalMarketKey =
-  | "1x2:home" | "1x2:draw" | "1x2:away"
   | "over_under_1_5:over" | "over_under_1_5:under"
   | "over_under_2_5:over" | "over_under_2_5:under"
   | "over_under_3_5:over" | "over_under_3_5:under"
@@ -48,9 +47,6 @@ type GoalMarketKey =
 type GoalProbs = ReturnType<typeof calculateMatchProbabilities>;
 
 const GOAL_MARKET_PROB: Record<GoalMarketKey, (p: GoalProbs) => number> = {
-  "1x2:home":             (p) => p.home,
-  "1x2:draw":             (p) => p.draw,
-  "1x2:away":             (p) => p.away,
   "over_under_1_5:over":  (p) => p.over15,
   "over_under_1_5:under": (p) => p.under15,
   "over_under_2_5:over":  (p) => p.over25,
@@ -96,6 +92,15 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const in2h = new Date(now.getTime() + 2 * 3600 * 1000);
   const in48h = new Date(now.getTime() + 48 * 3600 * 1000);
+
+  // Limpia value_bets pendientes de mercados que ya no soportamos (1x2 y
+  // hándicap asiático). Sin esto, los bets antiguos seguirían apareciendo
+  // en /value-bets hasta que el partido finalice.
+  await supabase
+    .from("value_bets")
+    .delete()
+    .eq("result", "pending")
+    .in("market", ["1x2", "asian_handicap"]);
 
   // Exclude HIGH_PRIORITY matches kicking off within 2h — sync-live-odds
   // handles those every 5 min. Processing them here too would cause a
@@ -194,14 +199,6 @@ export async function GET(req: NextRequest) {
           reasoningCtxHome = cardAvg.home;
           reasoningCtxAway = cardAvg.away;
         }
-      }
-
-      // ── Hándicap asiático (solo líneas .5, |line| ≤ 2.5) ──────────────────
-      // Descartamos |line| > 2.5 porque muchas casas (esp. LATAM) no las cubren
-      else if (o.market === "asian_handicap" && o.line != null) {
-        if (Math.abs(o.line) > 2.5) continue;
-        const side = o.selection as "home" | "away";
-        modelProb = calculateHandicapProbability(xgHome, xgAway, side, o.line);
       }
 
       if (modelProb === undefined) continue;
