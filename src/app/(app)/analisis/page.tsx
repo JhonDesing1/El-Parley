@@ -96,7 +96,7 @@ export default async function AnalisisPage({
     const ids = rows.map((r) => r.id);
     const matchCount = new Map<number, number>();
     if (ids.length) {
-      const nowIso = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+      const nowIso = new Date(new Date().getTime() - 3 * 3600 * 1000).toISOString();
       const { data: mRows } = await supabase
         .from("matches")
         .select("home_team_id, away_team_id")
@@ -168,7 +168,7 @@ export default async function AnalisisPage({
         )
         .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
         .in("status", ["scheduled", "live"])
-        .gte("kickoff", new Date(Date.now() - 3 * 3600 * 1000).toISOString())
+        .gte("kickoff", new Date(new Date().getTime() - 3 * 3600 * 1000).toISOString())
         .order("kickoff", { ascending: true })
         .limit(1)
         .maybeSingle();

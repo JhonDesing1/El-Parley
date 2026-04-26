@@ -330,8 +330,8 @@ export default async function HomePage() {
           </Card>
         ) : (
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            {betsByLeague.map(({ leagueMeta, bets }) => (
-                <div key={leagueMeta?.id ?? Math.random()} className="flex flex-col gap-3">
+            {betsByLeague.map(({ leagueMeta, bets }, idx) => (
+                <div key={leagueMeta?.id ?? `no-league-${idx}`} className="flex flex-col gap-3">
                   {/* League header */}
                   <div className="flex items-center gap-2 border-b border-border/40 pb-3">
                     {leagueMeta?.logo_url ? (

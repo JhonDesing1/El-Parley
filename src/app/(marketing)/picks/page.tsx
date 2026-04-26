@@ -60,7 +60,7 @@ export default async function PicksPage() {
   const supabase = (await createClient()) as any;
 
   const nowISO = new Date().toISOString();
-  const in7d = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  const in7d = new Date(new Date().getTime() + 7 * 24 * 3600 * 1000).toISOString();
 
   const [
     { data: tipsterPicks },
