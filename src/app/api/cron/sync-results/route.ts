@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchFixtureById } from "@/lib/api/api-football";
+import { fetchFixtureById, fetchFixtureStatistics } from "@/lib/api/api-football";
 import { sendTelegramMessage, notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
@@ -21,20 +21,29 @@ export const maxDuration = 60;
  * combos (1x2, over_under_2_5, btts). Others stay pending for manual resolution.
  */
 
+interface MatchStats {
+  totalCorners: number | null;
+  totalYellowCards: number | null;
+}
+
 /**
- * Devuelve el resultado de la apuesta dado el marcador final, o `null`
- * si el mercado no es resoluble únicamente con goles (ej. córners,
- * tarjetas — que requieren stats adicionales que aún no traemos).
+ * Devuelve el resultado de la apuesta dado el marcador final + stats
+ * opcionales del partido. Devuelve `null` si el mercado no se puede
+ * resolver con los datos disponibles (p. ej. córners sin stats).
  *
- * Devolver `null` evita marcar como "perdido" un bet que en realidad
- * podría haber ganado: el bet queda pendiente y se resuelve manualmente
- * o cuando carguemos las stats correspondientes.
+ * Devolver `null` evita marcar como "perdido" un bet que podría haber
+ * ganado: el bet queda pendiente para reintentar en la próxima ejecución.
+ *
+ * Para over/under con líneas .5 (sin push), una línea X.5 requiere
+ * `total ≥ ceil(X.5)` para que gane "over".
  */
 function resolveOutcome(
   market: string,
   selection: string,
   homeScore: number,
   awayScore: number,
+  line: number | null | undefined,
+  stats: MatchStats | null,
 ): "won" | "lost" | null {
   const total = homeScore + awayScore;
   const key = `${market}:${selection}`;
@@ -58,11 +67,27 @@ function resolveOutcome(
     case "double_chance:1x":       return homeScore >= awayScore ? "won" : "lost";
     case "double_chance:12":       return homeScore !== awayScore ? "won" : "lost";
     case "double_chance:x2":       return awayScore >= homeScore ? "won" : "lost";
-
-    // Córners y tarjetas: requieren stats que aún no traemos del API.
-    // Dejamos el bet pendiente para resolución manual.
-    default:                       return null;
   }
+
+  // ── Córners (requiere stats del partido) ────────────────────────
+  if (market === "corners_over_under" && line != null) {
+    if (stats?.totalCorners == null) return null;
+    const totalCorners = stats.totalCorners;
+    if (selection === "over")  return totalCorners > line ? "won" : "lost";
+    if (selection === "under") return totalCorners < line ? "won" : "lost";
+    return null;
+  }
+
+  // ── Tarjetas amarillas (requiere stats del partido) ─────────────
+  if (market === "cards_over_under" && line != null) {
+    if (stats?.totalYellowCards == null) return null;
+    const totalCards = stats.totalYellowCards;
+    if (selection === "over")  return totalCards > line ? "won" : "lost";
+    if (selection === "under") return totalCards < line ? "won" : "lost";
+    return null;
+  }
+
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -129,20 +154,43 @@ export async function GET(req: NextRequest) {
       const awayScore = fixture.away_score ?? 0;
       let betsSettled = 0;
 
+      // Stats del partido (córners + amarillas) — se cargan perezosamente
+      // solo si encontramos bets pendientes en mercados que las requieren,
+      // para no quemar requests del API en partidos sin bets de córners/cards.
+      let matchStats: MatchStats | null = null;
+      let statsAttempted = false;
+      const ensureStats = async (): Promise<MatchStats | null> => {
+        if (statsAttempted) return matchStats;
+        statsAttempted = true;
+        if (isVoid) return null; // partido cancelado: no hay stats que pedir
+        try {
+          matchStats = await fetchFixtureStatistics(match.id);
+        } catch (e) {
+          console.error("[sync-results] stats failed for", match.id, e);
+          matchStats = null;
+        }
+        return matchStats;
+      };
+
       // ── Resolve value_bets ─────────────────────────────────────
       const { data: pendingBets } = await supabase
         .from("value_bets")
-        .select("id, market, selection")
+        .select("id, market, selection, line")
         .eq("match_id", match.id)
         .eq("result", "pending");
 
       if (pendingBets?.length) {
+        const needsStats = pendingBets.some(
+          (b) => b.market === "corners_over_under" || b.market === "cards_over_under",
+        );
+        if (needsStats) await ensureStats();
+
         for (const bet of pendingBets) {
           let result: "won" | "lost" | "void" | null;
           if (isVoid) result = "void";
-          else result = resolveOutcome(bet.market, bet.selection, homeScore, awayScore);
+          else result = resolveOutcome(bet.market, bet.selection, homeScore, awayScore, bet.line, matchStats);
 
-          if (result === null) continue; // mercado no resoluble (córners/tarjetas)
+          if (result === null) continue; // mercado no resoluble — reintentar después
 
           await supabase
             .from("value_bets")
@@ -156,15 +204,20 @@ export async function GET(req: NextRequest) {
       // ── Resolve user_picks ─────────────────────────────────────
       const { data: pendingPicks } = await supabase
         .from("user_picks")
-        .select("id, user_id, market, selection, stake, odds")
+        .select("id, user_id, market, selection, line, stake, odds")
         .eq("match_id", match.id)
         .eq("result", "pending");
 
       if (pendingPicks?.length) {
+        const needsStats = pendingPicks.some(
+          (p) => p.market === "corners_over_under" || p.market === "cards_over_under",
+        );
+        if (needsStats) await ensureStats();
+
         for (const pick of pendingPicks) {
           let result: "won" | "lost" | "void" | null;
           if (isVoid) result = "void";
-          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore, pick.line, matchStats);
 
           if (result === null) continue;
 
@@ -219,7 +272,9 @@ export async function GET(req: NextRequest) {
 
           let result: "won" | "lost" | "void" | null;
           if (isVoid) result = "void";
-          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore);
+          // tipster_picks no tiene columna `line` — solo se auto-resuelven combos
+          // de la lista KNOWN_COMBOS (goles/btts), que no la necesitan.
+          else result = resolveOutcome(pick.market, pick.selection, homeScore, awayScore, null, null);
 
           if (result === null) continue;
 
@@ -235,15 +290,20 @@ export async function GET(req: NextRequest) {
       // ── Resolve parlay_legs ────────────────────────────────────
       const { data: pendingParlayLegs } = await supabase
         .from("parlay_legs")
-        .select("id, parlay_id, market, selection")
+        .select("id, parlay_id, market, selection, line")
         .eq("match_id", match.id)
         .eq("result", "pending");
 
       if (pendingParlayLegs?.length) {
+        const needsStats = pendingParlayLegs.some(
+          (l) => l.market === "corners_over_under" || l.market === "cards_over_under",
+        );
+        if (needsStats) await ensureStats();
+
         for (const leg of pendingParlayLegs) {
           let result: "won" | "lost" | "void" | null;
           if (isVoid) result = "void";
-          else result = resolveOutcome(leg.market, leg.selection, homeScore, awayScore);
+          else result = resolveOutcome(leg.market, leg.selection, homeScore, awayScore, leg.line, matchStats);
 
           if (result === null) continue;
 

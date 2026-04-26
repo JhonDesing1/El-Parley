@@ -216,6 +216,9 @@ export async function GET(req: NextRequest) {
         bookmaker_id: o.bookmaker_id,
         market: o.market,
         selection: o.selection,
+        // line es crítico para córners/tarjetas — sin él no se puede resolver
+        // el bet al final del partido (no sabemos qué línea era).
+        line: o.line ?? null,
         price: o.price,
         implied_prob: result.impliedProb,
         model_prob: modelProb,

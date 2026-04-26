@@ -613,6 +613,55 @@ export async function fetchFixtureById(fixtureId: number): Promise<{
   };
 }
 
+/**
+ * Devuelve estadísticas finales de un partido — totales por partido sumando
+ * ambos equipos. Usado para resolver bets de córners y tarjetas amarillas.
+ *
+ * Llama a /fixtures/statistics?fixture={id}. Una request por fixture.
+ * Devuelve null si la API no tiene stats todavía (común en ligas menores
+ * o en los primeros minutos tras el pitido final).
+ *
+ * Nota: API-Football devuelve "Yellow Cards" y "Red Cards" como tipos
+ * separados; aquí sumamos solo amarillas porque nuestros mercados de
+ * cards_over_under apuntan a tarjetas amarillas exclusivamente.
+ */
+interface AfTeamStat {
+  team: { id: number; name: string };
+  statistics: Array<{ type: string; value: number | string | null }>;
+}
+
+export async function fetchFixtureStatistics(fixtureId: number): Promise<{
+  totalCorners: number | null;
+  totalYellowCards: number | null;
+  totalRedCards: number | null;
+} | null> {
+  const response = await af<AfTeamStat[]>("/fixtures/statistics", {
+    fixture: fixtureId,
+  });
+  if (!response?.length) return null;
+
+  const sumStat = (typeName: string): number | null => {
+    let total = 0;
+    let found = false;
+    for (const team of response) {
+      const entry = team.statistics?.find((s) => s.type === typeName);
+      if (!entry || entry.value == null) continue;
+      const n = typeof entry.value === "number" ? entry.value : Number(entry.value);
+      if (Number.isFinite(n)) {
+        total += n;
+        found = true;
+      }
+    }
+    return found ? total : null;
+  };
+
+  return {
+    totalCorners: sumStat("Corner Kicks"),
+    totalYellowCards: sumStat("Yellow Cards"),
+    totalRedCards: sumStat("Red Cards"),
+  };
+}
+
 interface AfInjury {
   player: {
     id: number;

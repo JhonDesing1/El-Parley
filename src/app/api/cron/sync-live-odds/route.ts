@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
               bookmaker_id: o.bookmaker_id,
               market: o.market,
               selection: o.selection,
+              line: o.line ?? null,
               price: o.price,
               implied_prob: result.impliedProb,
               model_prob: modelProb,

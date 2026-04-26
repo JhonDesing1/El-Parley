@@ -1223,6 +1223,7 @@ export type Database = {
           is_premium: boolean | null
           is_suggested: boolean
           kelly_fraction: number | null
+          line: number | null
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
           model_prob: number
@@ -1241,6 +1242,7 @@ export type Database = {
           is_premium?: boolean | null
           is_suggested?: boolean
           kelly_fraction?: number | null
+          line?: number | null
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
           model_prob: number
@@ -1259,6 +1261,7 @@ export type Database = {
           is_premium?: boolean | null
           is_suggested?: boolean
           kelly_fraction?: number | null
+          line?: number | null
           market?: Database["public"]["Enums"]["market_type"]
           match_id?: number
           model_prob?: number
