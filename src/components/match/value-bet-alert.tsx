@@ -38,13 +38,14 @@ export function displayProbPct(modelProb: number): number {
 }
 
 /**
- * Confianza 0-100 derivada del modelo. Combina probabilidad y edge
- * para reflejar qué tan fuerte es la apuesta. Cap a 99 para evitar 100% absolutos.
+ * Confianza 0-90 derivada del modelo. Combina probabilidad y edge
+ * para reflejar qué tan fuerte es la apuesta. Cap a 90 — siempre hay varianza
+ * en fútbol y no queremos transmitir certeza absoluta al usuario.
  */
 export function confidenceScore(modelProb: number, edge: number): number {
   const base = modelProb * 85;
   const bonus = Math.min(Math.max(edge, 0), 0.15) * 100;
-  return Math.min(99, Math.round(base + bonus));
+  return Math.min(90, Math.round(base + bonus));
 }
 
 function formatKickoff(iso: string) {
@@ -118,7 +119,7 @@ export function ValueBetAlert({ valueBet, matchId, match, actions }: ValueBetAle
             icon={<Gauge className="h-4 w-4" />}
             label="Confianza"
             value={`${confidence}%`}
-            sub="0–100"
+            sub="Indicador estimado"
           />
           <Stat
             icon={<TrendingUp className="h-4 w-4" />}
