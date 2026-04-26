@@ -42,12 +42,12 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
   return (
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
-        {/* Logo + EL PARLEY con difuminado blanco como backdrop (detrás) */}
+        {/* Logo + EL PARLEY con difuminado negro como backdrop (detrás) */}
         <Link href="/" className="relative flex items-center gap-2.5">
-          {/* Halo blanco detrás del logo y el texto — no altera sus colores */}
+          {/* Halo negro detrás del logo y el texto — no altera sus colores */}
           <span
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-24 w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/55 blur-2xl"
+            className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-24 w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/55 blur-2xl"
           />
           <Image
             src="/logo.png"
@@ -131,7 +131,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
               <SheetTitle className="relative flex items-center gap-2.5">
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-20 w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/55 blur-2xl"
+                  className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-20 w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/55 blur-2xl"
                 />
                 <Image
                   src="/logo.png"
