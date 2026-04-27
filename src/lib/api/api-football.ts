@@ -300,22 +300,57 @@ function buildFixture(f: AfFixture): NextFixtureForTeam {
   };
 }
 
+function pickNextUpcoming(fixtures: AfFixture[]): AfFixture | null {
+  const nowMs = Date.now();
+  const upcoming = fixtures
+    .filter((f) => {
+      const t = new Date(f.fixture.date).getTime();
+      if (Number.isNaN(t) || t < nowMs - 3 * 3600 * 1000) return false;
+      return !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short);
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime(),
+    );
+  return upcoming[0] ?? null;
+}
+
 /**
  * Próximo partido confirmado de un equipo — usado por /analisis como fallback
  * cuando la BD aún no lo tiene sincronizado (liga fuera del set high-priority).
  *
- * Estrategia:
- *   1) `next=1`  → el endpoint clásico. Rápido y suele responder.
- *   2) Si eso devuelve 0 o falla (p. ej. temporada recién cerrada), se hace
- *      un barrido `from/to` de los próximos 60 días filtrando por team_id
- *      a través de las ligas populares, tomando la fecha más próxima.
+ * Estrategia (3 intentos en cascada, paramos en el primero que devuelva fixture):
+ *   1) `team + next=20` — devuelve los próximos 20 partidos del equipo en
+ *      cualquier competición. En el plan Pro suele ser la respuesta más rápida
+ *      y exhaustiva, pero a veces API-Football pide `season` obligatorio.
+ *   2) `team + season=year` y `team + season=year-1` en paralelo — cubre el
+ *      año europeo (Aug-May) y el calendario natural (Jan-Dec).
+ *   3) `team + season=year + from/to` por si season-only devuelve sólo
+ *      históricos para equipos con muchas competiciones (Champions+Liga+Copa).
  *
- * Cachea 30 min por team para respetar el cupo de 100 req/día.
+ * Cache corta (5 min) para que respuestas vacías transitorias no bloqueen
+ * al usuario media hora. Con plan Pro (7500 req/día) el coste es asumible.
  */
 export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtureResult> {
-  // API-Football exige `season` cuando se consulta fixtures por team sin fixture id.
-  // En Pro y gratuito, pasar team + season siempre funciona — probamos año actual
-  // y anterior para cubrir ligas europeas (Aug-May) y americanas (Jan-Dec).
+  const errors: string[] = [];
+
+  // ── Intento 1: next=20 (sin season) ───────────────────────────────────
+  try {
+    const data = await afCached<AfFixture[]>(
+      "/fixtures",
+      { team: teamId, next: 20 },
+      5 * 60,
+      `team-${teamId}-next20`,
+    );
+    const hit = pickNextUpcoming(data);
+    if (hit) return { kind: "ok", fixture: buildFixture(hit) };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // "Season field is required" = el plan/endpoint exige season → seguimos.
+    if (!/season/i.test(msg)) errors.push(`next20: ${msg}`);
+  }
+
+  // ── Intento 2: por temporada actual y anterior ────────────────────────
   const now = new Date();
   const year = now.getFullYear();
   const candidates = [year, year - 1];
@@ -325,7 +360,7 @@ export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtu
       afCached<AfFixture[]>(
         "/fixtures",
         { team: teamId, season },
-        30 * 60,
+        5 * 60,
         `team-${teamId}-season-${season}`,
       )
         .then((r) => ({ ok: true as const, data: r, season }))
@@ -333,27 +368,52 @@ export async function fetchNextFixtureForTeam(teamId: number): Promise<NextFixtu
     ),
   );
 
-  // Si TODAS las temporadas fallaron con error, surfaceamos el primer error
-  // para que el usuario sepa si es cuota, key o timeout.
-  const allFailed = seasonResults.every((r) => !r.ok);
-  if (allFailed) {
-    const firstErr = seasonResults[0] as { ok: false; error: unknown; season: number };
-    const reason = firstErr.error instanceof Error ? firstErr.error.message : "API-Football no disponible";
-    return { kind: "error", reason };
+  const allFixtures: AfFixture[] = seasonResults.flatMap((r) => (r.ok ? r.data : []));
+  const seasonHit = pickNextUpcoming(allFixtures);
+  if (seasonHit) return { kind: "ok", fixture: buildFixture(seasonHit) };
+
+  for (const r of seasonResults) {
+    if (!r.ok) {
+      const msg = r.error instanceof Error ? r.error.message : String(r.error);
+      errors.push(`season=${r.season}: ${msg}`);
+    }
   }
 
-  const allFixtures: AfFixture[] = seasonResults.flatMap((r) => (r.ok ? r.data : []));
-  const nowMs = Date.now();
-  const upcoming = allFixtures
-    .filter((f) => {
-      const t = new Date(f.fixture.date).getTime();
-      if (Number.isNaN(t) || t < nowMs - 3 * 3600 * 1000) return false;
-      return !["FT", "AET", "PEN", "CANC", "ABD"].includes(f.fixture.status.short);
-    })
-    .sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
+  // ── Intento 3: season + from/to explícito (60 días) ───────────────────
+  // Cubre el caso raro donde season-only devuelve sólo el histórico para
+  // equipos con muchas competiciones. Probamos las dos seasons.
+  const fromIso = new Date(now.getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const toIso = new Date(now.getTime() + 60 * 86400 * 1000).toISOString().slice(0, 10);
 
-  if (upcoming.length > 0) {
-    return { kind: "ok", fixture: buildFixture(upcoming[0]) };
+  const rangeResults = await Promise.all(
+    candidates.map((season) =>
+      afCached<AfFixture[]>(
+        "/fixtures",
+        { team: teamId, season, from: fromIso, to: toIso },
+        5 * 60,
+        `team-${teamId}-season-${season}-range`,
+      )
+        .then((r) => ({ ok: true as const, data: r, season }))
+        .catch((e) => ({ ok: false as const, error: e, season })),
+    ),
+  );
+
+  const rangeFixtures: AfFixture[] = rangeResults.flatMap((r) => (r.ok ? r.data : []));
+  const rangeHit = pickNextUpcoming(rangeFixtures);
+  if (rangeHit) return { kind: "ok", fixture: buildFixture(rangeHit) };
+
+  for (const r of rangeResults) {
+    if (!r.ok) {
+      const msg = r.error instanceof Error ? r.error.message : String(r.error);
+      errors.push(`range season=${r.season}: ${msg}`);
+    }
+  }
+
+  // Si TODOS los intentos fallaron por error (no por respuesta vacía),
+  // surfaceamos el primer mensaje útil. Si simplemente no hubo fixtures,
+  // devolvemos empty para que la UI muestre el mensaje correcto.
+  if (errors.length > 0 && allFixtures.length === 0 && rangeFixtures.length === 0) {
+    return { kind: "error", reason: errors[0] };
   }
   return { kind: "empty" };
 }
