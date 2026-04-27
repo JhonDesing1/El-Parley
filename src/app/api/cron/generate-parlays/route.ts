@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet, generatePremium90Parlays } from "@/lib/betting/parlay-calculator";
+import { marketRank, marketWeight } from "@/lib/betting/market-priority";
+import { leagueTier, leagueWeight } from "@/lib/betting/league-priority";
 import type { Database } from "@/types/database";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -48,7 +50,7 @@ type MatchRow = {
   kickoff: string;
   home_team: { name: string } | null;
   away_team: { name: string } | null;
-  league: { name: string } | null;
+  league: { id: number; name: string } | null;
 };
 
 type Candidate = {
@@ -61,6 +63,10 @@ type Candidate = {
   bookmaker_id: number;
   is_premium: boolean;
   edge: number;
+  leagueId: number | null;
+  // Peso por tier de competición — sólo afecta ordenación, no la matemática
+  // combinada de los parlays.
+  priorityWeight: number;
 };
 
 function buildParlayTitle(legs: Candidate[], matchMap: Map<number, MatchRow>): string {
@@ -125,7 +131,7 @@ export async function GET(req: NextRequest) {
       `id, kickoff,
        home_team:teams!home_team_id(name),
        away_team:teams!away_team_id(name),
-       league:leagues(name)`,
+       league:leagues(id, name)`,
     )
     .gte("kickoff", now.toISOString())
     .lte("kickoff", in36h.toISOString())
@@ -184,26 +190,46 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Deduplicate: keep best (highest model_prob) bet per match
+  // Deduplicate: keep best bet per match. El "mejor" combina prob. del modelo
+  // con prioridad de mercado y de competición — Champions/Libertadores y
+  // mercados de eventos contables ganan empates frente a btts/DC en ligas
+  // menores.
+  const leagueIdFor = (matchId: number) => matchMap.get(matchId)?.league?.id ?? null;
+  const candidateScore = (vb: ValueBetRow) =>
+    (vb.model_prob ?? 0) * marketWeight(vb.market) * leagueWeight(leagueIdFor(vb.match_id));
+
   const bestPerMatch = new Map<number, ValueBetRow>();
   for (const vb of valueBets as ValueBetRow[]) {
     const existing = bestPerMatch.get(vb.match_id);
-    if (!existing || (vb.model_prob ?? 0) > (existing.model_prob ?? 0)) {
+    if (!existing) {
+      bestPerMatch.set(vb.match_id, vb);
+      continue;
+    }
+    const scoreNew = candidateScore(vb);
+    const scoreOld = candidateScore(existing);
+    if (scoreNew > scoreOld) {
+      bestPerMatch.set(vb.match_id, vb);
+    } else if (scoreNew === scoreOld && marketRank(vb.market) < marketRank(existing.market)) {
       bestPerMatch.set(vb.match_id, vb);
     }
   }
 
-  const allCandidates: Candidate[] = [...bestPerMatch.values()].map((vb) => ({
-    matchId: vb.match_id,
-    market: vb.market,
-    selection: vb.selection,
-    decimalOdds: vb.price,
-    modelProb: vb.model_prob ?? 0,
-    confidence: (vb.confidence ?? "low") as "low" | "medium" | "high",
-    bookmaker_id: vb.bookmaker_id,
-    is_premium: vb.is_premium ?? false,
-    edge: vb.edge ?? 0,
-  }));
+  const allCandidates: Candidate[] = [...bestPerMatch.values()].map((vb) => {
+    const lid = leagueIdFor(vb.match_id);
+    return {
+      matchId: vb.match_id,
+      market: vb.market,
+      selection: vb.selection,
+      decimalOdds: vb.price,
+      modelProb: vb.model_prob ?? 0,
+      confidence: (vb.confidence ?? "low") as "low" | "medium" | "high",
+      bookmaker_id: vb.bookmaker_id,
+      is_premium: vb.is_premium ?? false,
+      edge: vb.edge ?? 0,
+      leagueId: lid,
+      priorityWeight: leagueWeight(lid),
+    };
+  });
 
   const generatedIds: string[] = [];
 
@@ -317,10 +343,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Premium parlay: all bets, sorted by edge, no overlap with free ─
+  // ── Premium parlay: all bets, ordenados por tier de competición primero,
+  //    luego por edge × peso de mercado × peso de liga.
   const premiumCandidates = allCandidates
     .filter((c) => !usedMatchIds.has(c.matchId))
-    .sort((a, b) => b.edge - a.edge);
+    .sort((a, b) => {
+      const tierA = leagueTier(a.leagueId);
+      const tierB = leagueTier(b.leagueId);
+      if (tierA !== tierB) return tierA - tierB;
+      const sa = a.edge * marketWeight(a.market) * leagueWeight(a.leagueId);
+      const sb = b.edge * marketWeight(b.market) * leagueWeight(b.leagueId);
+      return sb - sa;
+    });
 
   const premiumLegs = generateDailyParlay(premiumCandidates, {
     minLegs: 3,
@@ -353,10 +387,17 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Combinada 80%: prob combinada > 80% + cuota objetivo ≈ 3.5 ─────────
-  // Usa todos los candidatos (no excluye por usedMatchIds — es un producto distinto)
+  // Tier de competición primero, luego prob × pesos de mercado y liga.
   const combinada80Candidates = allCandidates
     .filter((c) => !usedMatchIds.has(c.matchId))
-    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+    .sort((a, b) => {
+      const tierA = leagueTier(a.leagueId);
+      const tierB = leagueTier(b.leagueId);
+      if (tierA !== tierB) return tierA - tierB;
+      const sa = (a.modelProb ?? 0) * marketWeight(a.market) * leagueWeight(a.leagueId);
+      const sb = (b.modelProb ?? 0) * marketWeight(b.market) * leagueWeight(b.leagueId);
+      return sb - sa;
+    });
 
   const combinada80Legs = generateValueParlay(combinada80Candidates, {
     targetOdds: 3.5,

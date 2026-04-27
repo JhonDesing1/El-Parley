@@ -93,14 +93,26 @@ export function calculateParlay(legs: ParlayLeg[]): ParlayResult {
  * 4. Se detiene al alcanzar el target de odds (±25%)
  */
 export function generateValueParlay(
-  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  candidates: Array<
+    ParlayLeg & {
+      confidence: "low" | "medium" | "high";
+      edge?: number;
+      priorityWeight?: number;
+    }
+  >,
   options: { targetOdds?: number; minCombinedProb?: number; minIndividualProb?: number } = {},
 ): ParlayLeg[] | null {
   const { targetOdds = 3.5, minCombinedProb = 0.80, minIndividualProb = 0.82 } = options;
 
+  // priorityWeight (>1 = competición top, <1 = liga menor) sólo afecta al
+  // orden — la matemática combinada sigue usando modelProb crudo.
   const filtered = candidates
     .filter((c) => (c.modelProb ?? 0) >= minIndividualProb)
-    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+    .sort(
+      (a, b) =>
+        (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
+    );
 
   if (filtered.length < 2) return null;
 
@@ -141,7 +153,13 @@ export function generateValueParlay(
  * 3. Máximo maxLegs piernas
  */
 export function generateFunBet(
-  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  candidates: Array<
+    ParlayLeg & {
+      confidence: "low" | "medium" | "high";
+      edge?: number;
+      priorityWeight?: number;
+    }
+  >,
   options: { targetOdds?: number; maxLegs?: number } = {},
 ): ParlayLeg[] | null {
   const { targetOdds = 30, maxLegs = 10 } = options;
@@ -154,10 +172,15 @@ export function generateFunBet(
     return true;
   });
 
-  // Ordenar por cuota descendente para alcanzar el target con menos piernas
+  // Cuota descendente con un empuje por priorityWeight para que ante cuotas
+  // similares pesen las competiciones top.
   const sorted = [...deduped]
     .filter((c) => c.decimalOdds >= 1.25)
-    .sort((a, b) => b.decimalOdds - a.decimalOdds);
+    .sort(
+      (a, b) =>
+        b.decimalOdds * (b.priorityWeight ?? 1) -
+        a.decimalOdds * (a.priorityWeight ?? 1),
+    );
 
   if (sorted.length < 2) return null;
 
@@ -192,16 +215,28 @@ export function generateFunBet(
  *    garantizando diversidad de partidos primarios
  */
 export function generatePremium90Parlays(
-  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  candidates: Array<
+    ParlayLeg & {
+      confidence: "low" | "medium" | "high";
+      edge?: number;
+      priorityWeight?: number;
+    }
+  >,
   count = 4,
 ): ParlayLeg[][] {
   const MIN_COMBINED_PROB = 0.90;
   const MIN_TOTAL_ODDS = 1.60;
   const MIN_INDIVIDUAL_PROB = 0.88;
 
+  // Pre-orden por modelProb × priorityWeight: la franja top del pool tira de
+  // competiciones importantes, manteniendo el filtro de prob individual.
   const filtered = candidates
     .filter((c) => (c.modelProb ?? 0) >= MIN_INDIVIDUAL_PROB && c.decimalOdds >= 1.10)
-    .sort((a, b) => (b.modelProb ?? 0) - (a.modelProb ?? 0));
+    .sort(
+      (a, b) =>
+        (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
+    );
 
   if (filtered.length < 2) return [];
 
@@ -279,7 +314,13 @@ export function generatePremium90Parlays(
  * 4. Si no hay suficientes legs de alta prob, relaja el umbral y toma los mejores disponibles
  */
 export function generateDailyParlay(
-  candidates: Array<ParlayLeg & { confidence: "low" | "medium" | "high"; edge?: number }>,
+  candidates: Array<
+    ParlayLeg & {
+      confidence: "low" | "medium" | "high";
+      edge?: number;
+      priorityWeight?: number;
+    }
+  >,
   options: {
     minLegs?: number;
     maxLegs?: number;
@@ -292,9 +333,11 @@ export function generateDailyParlay(
   const filtered = candidates
     .filter((c) => c.confidence !== "low" && (c.modelProb ?? 0) > 0.55)
     .sort((a, b) => {
-      // Score = modelProb * (1 + edge) para priorizar bets con más valor esperado
-      const scoreA = (a.modelProb ?? 0) * (1 + (a.edge ?? 0));
-      const scoreB = (b.modelProb ?? 0) * (1 + (b.edge ?? 0));
+      // Score = modelProb * (1 + edge) * priorityWeight (tier de competición).
+      // El priorityWeight sólo influye en el orden, no en la matemática
+      // combinada que calcula `calculateParlay`.
+      const scoreA = (a.modelProb ?? 0) * (1 + (a.edge ?? 0)) * (a.priorityWeight ?? 1);
+      const scoreB = (b.modelProb ?? 0) * (1 + (b.edge ?? 0)) * (b.priorityWeight ?? 1);
       return scoreB - scoreA;
     });
 

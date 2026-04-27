@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 import { isPremiumUser } from "@/lib/utils/auth";
 import { clampDisplayProb } from "@/lib/utils/format";
+import { marketRank, marketWeight } from "@/lib/betting/market-priority";
+import { leagueTier, leagueWeight } from "@/lib/betting/league-priority";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
@@ -74,7 +76,7 @@ export default async function RecomendadosPage() {
          id, kickoff, status,
          home_team:teams!home_team_id(id, name, short_name, logo_url),
          away_team:teams!away_team_id(id, name, short_name, logo_url),
-         league:leagues(name, country, logo_url)
+         league:leagues(id, name, country, logo_url)
        )`,
     )
     .eq("result", "pending")
@@ -89,7 +91,34 @@ export default async function RecomendadosPage() {
   const { data: rawBets } = await query;
   const bets = (rawBets ?? []).filter((b) => b.match != null);
 
-  // Group by match — best bet per match (highest model_prob)
+  // Re-orden 3-niveles:
+  //   1) Tier de competición (Champions/Libertadores antes que ligas locales)
+  //   2) Prioridad de mercado (córners → amarillas → goles → btts → DC)
+  //   3) Score model_prob × pesos (mercado y liga)
+  // Si Champions juega mañana, sus picks aparecen primero por el tier; dentro
+  // de cada partido manda el mercado más predecible.
+  const leagueIdOf = (b: (typeof bets)[number]) =>
+    ((b.match as any)?.league?.id ?? null) as number | null;
+
+  bets.sort((a, b) => {
+    const tierA = leagueTier(leagueIdOf(a));
+    const tierB = leagueTier(leagueIdOf(b));
+    if (tierA !== tierB) return tierA - tierB;
+    const rankA = marketRank(a.market);
+    const rankB = marketRank(b.market);
+    if (rankA !== rankB) return rankA - rankB;
+    const scoreA =
+      Number(a.model_prob ?? 0) *
+      marketWeight(a.market) *
+      leagueWeight(leagueIdOf(a));
+    const scoreB =
+      Number(b.model_prob ?? 0) *
+      marketWeight(b.market) *
+      leagueWeight(leagueIdOf(b));
+    return scoreB - scoreA;
+  });
+
+  // Group by match — keep the best bet per match using the same priority order.
   const matchMap = new Map<
     number,
     { match: any; bets: typeof bets; injuries: number }
