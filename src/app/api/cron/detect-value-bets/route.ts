@@ -16,6 +16,9 @@ import {
 } from "@/lib/betting/stats";
 import { HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { notifyProUsers } from "@/lib/telegram/send";
+import type { Database } from "@/types/database";
+
+type ValueBetInsert = Database["public"]["Tables"]["value_bets"]["Insert"];
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -177,7 +180,39 @@ export async function GET(req: NextRequest) {
   // de 1-2 partidos).
   const MIN_TEAM_SAMPLE = 5;
 
+  // Bulk-load de TODAS las odds de los partidos en una sola query. Antes se
+  // hacía una query por partido dentro del bucle (N+1) — con 200 matches eso
+  // son 200 round-trips serializados. Una query única recorta cron en ~5-10x.
+  type OddsRow = {
+    id: number;
+    match_id: number;
+    bookmaker_id: number;
+    market: string;
+    selection: string;
+    price: number;
+    line: number | null;
+  };
+  const matchIds = matches.map((m) => m.id);
+  const oddsByMatch = new Map<number, OddsRow[]>();
+  if (matchIds.length > 0) {
+    const { data: allOdds } = await supabase
+      .from("odds")
+      .select("id, match_id, bookmaker_id, market, selection, price, line")
+      .in("match_id", matchIds);
+    for (const o of (allOdds ?? []) as OddsRow[]) {
+      const arr = oddsByMatch.get(o.match_id);
+      if (arr) arr.push(o);
+      else oddsByMatch.set(o.match_id, [o]);
+    }
+  }
+
   let detected = 0;
+  // Acumulamos todos los bets nuevos para insertarlos en una única
+  // operación al final, en vez de hacer delete+insert por partido (2N
+  // round-trips). Sólo se tocan los matches con bets nuevos para
+  // preservar la semántica anterior.
+  const allNewBets: ValueBetInsert[] = [];
+  const touchedMatchIds = new Set<number>();
 
   for (const match of matches) {
     const xgHome = match.model_expected_goals_home!;
@@ -230,14 +265,10 @@ export async function GET(req: NextRequest) {
     const cornerAvg = { home: cornerHomeExpected, away: cornerAwayExpected };
     const cardAvg   = { home: cardHomeExpected,   away: cardAwayExpected   };
 
-    const { data: odds } = await supabase
-      .from("odds")
-      .select("id, bookmaker_id, market, selection, price, line")
-      .eq("match_id", match.id);
-
+    const odds = oddsByMatch.get(match.id);
     if (!odds?.length) continue;
 
-    const bets = [];
+    const bets: ValueBetInsert[] = [];
 
     for (const o of odds) {
       let modelProb: number | undefined;
@@ -284,7 +315,7 @@ export async function GET(req: NextRequest) {
       bets.push({
         match_id: match.id,
         bookmaker_id: o.bookmaker_id,
-        market: o.market,
+        market: o.market as ValueBetInsert["market"],
         selection: o.selection,
         // line es crítico para córners/tarjetas — sin él no se puede resolver
         // el bet al final del partido (no sabemos qué línea era).
@@ -314,15 +345,27 @@ export async function GET(req: NextRequest) {
     }
 
     if (bets.length) {
+      touchedMatchIds.add(match.id);
+      allNewBets.push(...bets);
+    }
+  }
+
+  // Reemplazo atómico-por-batch: un único delete (todos los matches tocados)
+  // + un único insert. PostgREST procesa ambos como bulk → ms en vez de
+  // segundos para crons con muchos partidos.
+  if (touchedMatchIds.size > 0) {
+    const safeIds = [...touchedMatchIds]
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (safeIds.length > 0) {
       await supabase
         .from("value_bets")
         .delete()
-        .eq("match_id", match.id)
+        .in("match_id", safeIds)
         .eq("result", "pending");
-
-      const { error: insErr } = await supabase.from("value_bets").insert(bets);
-      if (!insErr) detected += bets.length;
     }
+    const { error: insErr } = await supabase.from("value_bets").insert(allNewBets);
+    if (!insErr) detected = allNewBets.length;
   }
 
   // Notificar por Telegram si se detectaron value bets nuevas

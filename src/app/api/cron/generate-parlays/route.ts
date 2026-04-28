@@ -383,7 +383,12 @@ export async function GET(req: NextRequest) {
       "premium",
     );
 
-    if (id) generatedIds.push(id);
+    if (id) {
+      generatedIds.push(id);
+      // Reservar estos partidos para que la Combinada 80% / 90% / FunBet
+      // posteriores no reutilicen las mismas piernas.
+      premiumLegs.forEach((l) => usedMatchIds.add(l.matchId));
+    }
   }
 
   // ── Combinada 80%: prob combinada > 80% + cuota objetivo ≈ 3.5 ─────────
@@ -399,10 +404,15 @@ export async function GET(req: NextRequest) {
       return sb - sa;
     });
 
+  // Combinada 80%: con prob individual ≥0.82 sobre 2 piernas la combinada
+  // máxima posible es ~0.67 — exigir 0.80 hacía que esta combinada nunca se
+  // generara. Bajamos minCombinedProb a 0.65 (≈ x1.54 fair odds) para que
+  // sea matemáticamente alcanzable, y subimos minIndividualProb a 0.85 para
+  // mantener la calidad por pierna.
   const combinada80Legs = generateValueParlay(combinada80Candidates, {
     targetOdds: 3.5,
-    minCombinedProb: 0.80,
-    minIndividualProb: 0.82,
+    minCombinedProb: 0.65,
+    minIndividualProb: 0.85,
   });
 
   if (combinada80Legs && combinada80Legs.length >= 2) {
@@ -417,8 +427,8 @@ export async function GET(req: NextRequest) {
 
     const id = await insertParlay(
       c80WithMeta,
-      `Combinada 80% · x${totalOdds.toFixed(2)}`,
-      `${combinada80Legs.length} selecciones con ${(combinedProb * 100).toFixed(0)}% de probabilidad combinada. Cuotas acertadas históricas: 0.80.`,
+      `Combinada Segura · x${totalOdds.toFixed(2)}`,
+      `${combinada80Legs.length} selecciones de alta probabilidad. Probabilidad combinada estimada: ${(combinedProb * 100).toFixed(0)}%.`,
       "free",
     );
 

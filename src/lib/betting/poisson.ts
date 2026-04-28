@@ -138,11 +138,17 @@ export function calculateMatchProbabilities(
     }
   }
 
-  // Normalizar por si la matriz truncada no suma exactamente 1
+  // Normalizar por si la matriz truncada (o ajustada por Dixon-Coles)
+  // no suma exactamente 1. Aplicar a TODAS las marginales — no sólo a
+  // home/draw/away — para que over/under y btts queden coherentes.
   const total = home + draw + away;
   home /= total;
   draw /= total;
   away /= total;
+  over15 /= total;
+  over25 /= total;
+  over35 /= total;
+  btts /= total;
 
   return {
     home,

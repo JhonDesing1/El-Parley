@@ -102,7 +102,11 @@ export function generateValueParlay(
   >,
   options: { targetOdds?: number; minCombinedProb?: number; minIndividualProb?: number } = {},
 ): ParlayLeg[] | null {
-  const { targetOdds = 3.5, minCombinedProb = 0.80, minIndividualProb = 0.82 } = options;
+  // Defaults coherentes: con minIndividualProb=0.82 y 2 piernas la combinada
+  // máxima es 0.67 — exigir 0.80 hacía que esta función nunca devolviera
+  // parlay. Bajamos el suelo a 0.65 para que matemáticamente sea alcanzable
+  // y mantenemos el filtro individual estricto.
+  const { targetOdds = 3.5, minCombinedProb = 0.65, minIndividualProb = 0.82 } = options;
 
   // priorityWeight (>1 = competición top, <1 = liga menor) sólo afecta al
   // orden — la matemática combinada sigue usando modelProb crudo.

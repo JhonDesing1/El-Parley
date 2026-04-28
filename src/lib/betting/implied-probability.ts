@@ -34,6 +34,10 @@ export function removeVigMultiplicative(odds: number[]): number[] {
 export function removeVigShin(odds: number[]): number[] {
   const rawProbs = odds.map(impliedProbability);
   const n = rawProbs.length;
+  // Shin requiere al menos 3 outcomes — para mercados de dos vías
+  // (Over/Under, BTTS, hándicap) el método multiplicativo es equivalente
+  // y evita la división por (n-2) = 0.
+  if (n < 3) return removeVigMultiplicative(odds);
   const sumProbs = rawProbs.reduce((a, b) => a + b, 0);
 
   // Resolver z iterativamente (método de punto fijo)

@@ -42,12 +42,18 @@ export function detectValueBet({
   const expectedValue = modelProb * (decimalOdds - 1) - (1 - modelProb);
   const kelly = kellyFraction(modelProb, decimalOdds);
 
+  // Edge mínimo escalado por cuota: el overround del bookie es proporcionalmente
+  // mayor en cuotas altas y el ruido del modelo Poisson también crece. Para
+  // cuotas ≤2 mantenemos el umbral del caller; por encima exigimos más edge.
+  // Ej.: cuota 4 ⇒ ~5% real, cuota 8 ⇒ ~9%.
+  const dynamicMinEdge = Math.max(minEdge, minEdge + (decimalOdds - 2) * 0.01);
+
   let confidence: ValueBetResult["confidence"] = "low";
   if (edge >= 0.08 && modelProb >= 0.4) confidence = "high";
   else if (edge >= 0.05) confidence = "medium";
 
   return {
-    isValue: edge >= minEdge,
+    isValue: edge >= dynamicMinEdge,
     edge,
     expectedValue,
     kelly,
@@ -155,9 +161,10 @@ export function explainValueBet(
   context: { selection: string; bookmaker: string; market: string },
 ): string {
   const edgePct = (result.edge * 100).toFixed(1);
-  const modelPct = ((1 / result.impliedProb) * (result.edge + 1) * 100).toFixed(
-    0,
-  );
+  // modelProb = (1 + edge) * impliedProb. Antes se calculaba como
+  // (1/impliedProb) * (1+edge) → daba la cuota multiplicada por (1+edge)
+  // y producía valores absurdos (>100%).
+  const modelPct = ((1 + result.edge) * result.impliedProb * 100).toFixed(0);
 
   if (!result.isValue) {
     return `Sin valor detectado: la cuota de ${context.bookmaker} refleja o sobreestima la probabilidad real.`;
