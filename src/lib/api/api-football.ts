@@ -22,6 +22,31 @@ const BASE = `https://${process.env.API_FOOTBALL_HOST ?? "v3.football.api-sports
  */
 export const HIGH_PRIORITY_LEAGUE_IDS = [1, 2, 3, 13, 39, 61, 78, 135, 140, 239, 848];
 
+/**
+ * Ligas con calendario por año natural (Ene→Dic). El resto sigue el calendario
+ * europeo (Ago→May), que API-Football identifica con el año de inicio.
+ *
+ *  - Mundial / Eurocopa / Copa América → torneo en un único año
+ *  - Libertadores / Sudamericana → temporada por año natural
+ *  - Liga BetPlay (Colombia), MLS, Brasileirão → calendario natural
+ */
+const CALENDAR_YEAR_LEAGUES = new Set<number>([1, 4, 9, 13, 11, 71, 239, 253]);
+
+/**
+ * Devuelve la temporada vigente para una liga en API-Football. Para ligas
+ * europeas usa el año de inicio (Ago 2025 – May 2026 → 2025); para ligas de
+ * año natural usa el año actual.
+ *
+ * Esto evita depender del valor estático en `public.leagues.season`, que
+ * inevitablemente se queda atrás cada vez que arranca una temporada nueva.
+ */
+export function currentSeasonForLeague(leagueId: number, today: Date = new Date()): number {
+  const year = today.getUTCFullYear();
+  if (CALENDAR_YEAR_LEAGUES.has(leagueId)) return year;
+  // Ligas europeas: la temporada nueva arranca en agosto (mes índice 7).
+  return today.getUTCMonth() >= 7 ? year : year - 1;
+}
+
 function headers() {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) throw new Error("API_FOOTBALL_KEY no configurada");
@@ -904,7 +929,16 @@ export async function fetchOddsForFixtures(
   const response = await af<AfOddsResponse[]>("/odds", { fixture: fixtureId });
   if (!response.length) return [];
 
-  const out: any[] = [];
+  // Dedup por la clave única (match_id, bookmaker_id, market, selection, line):
+  // córners y tarjetas tienen varios alias (`Total Corners`, `Corners Over Under`,
+  // `Corners 1x2 (Total)`...) que API-Football devuelve para la misma casa, lo
+  // que generaba duplicados → el upsert con onConflict los rechazaba con
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" y caía
+  // todo el batch en silencio (matches sin cuotas).
+  // Política: nos quedamos con el precio más alto (mejor para el apostador).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dedup = new Map<string, any>();
+
   for (const entry of response) {
     for (const book of entry.bookmakers) {
       const slug = BOOKMAKER_NAME_TO_SLUG[book.name];
@@ -922,18 +956,22 @@ export async function fetchOddsForFixtures(
           const price = parseFloat(v.odd);
           if (isNaN(price) || price <= 1) continue;
 
-          out.push({
-            match_id: fixtureId,
-            bookmaker_id: bookmakerId,
-            market: mapped.market,
-            selection: mapped.selection,
-            price,
-            line: mapped.line,
-            is_live: false,
-          });
+          const key = `${bookmakerId}|${mapped.market}|${mapped.selection}|${mapped.line ?? ""}`;
+          const existing = dedup.get(key);
+          if (!existing || price > existing.price) {
+            dedup.set(key, {
+              match_id: fixtureId,
+              bookmaker_id: bookmakerId,
+              market: mapped.market,
+              selection: mapped.selection,
+              price,
+              line: mapped.line,
+              is_live: false,
+            });
+          }
         }
       }
     }
   }
-  return out;
+  return [...dedup.values()];
 }

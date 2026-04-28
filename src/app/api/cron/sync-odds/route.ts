@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fetchOddsForFixtures, BOOKMAKER_NAME_TO_SLUG } from "@/lib/api/api-football";
+import { notifyAdminError } from "@/lib/telegram/send";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -68,6 +69,13 @@ export async function GET(req: NextRequest) {
       if (r.status === "fulfilled") {
         totalOdds += r.value;
         if (r.value > 0) updatedMatches++;
+      } else {
+        // No silenciar errores: un upsert que rechaza un lote entero (p.ej.
+        // por duplicados de constraint) dejaba partidos sin cuotas sin que
+        // nadie se enterara. Loguea y notifica.
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        console.error("[sync-odds] match failed:", msg);
+        await notifyAdminError("sync-odds", msg);
       }
     }
 

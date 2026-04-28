@@ -1,10 +1,10 @@
 /**
  * Prioridad de competiciones para ranking de picks.
  *
- * Tier 1 — Selecciones top (Mundial, Eurocopa, Copa América)
- * Tier 2 — Continentales top (Champions, Libertadores)
+ * Tier 1 — Champions League (siempre la prioridad máxima)
+ * Tier 2 — Otras grandes citas (Mundial, Eurocopa, Copa América, Libertadores)
  * Tier 3 — Top 5 ligas europeas
- * Tier 4 — Continentales 2ª (Europa League, Conference)
+ * Tier 4 — Continentales 2ª (Europa League, Conference, Sudamericana)
  * Tier 5 — Locales relevantes (Liga BetPlay, MLS)
  * Tier 6 — Resto
  *
@@ -15,13 +15,13 @@
  */
 
 const TIER_BY_LEAGUE: Record<number, number> = {
-  // Tier 1 — selecciones
-  1: 1,    // World Cup
-  4: 1,    // UEFA Euro
-  9: 1,    // Copa America
+  // Tier 1 — Champions League: la prioridad siempre va con Champions.
+  2: 1,    // UEFA Champions League
 
-  // Tier 2 — continentales top
-  2: 2,    // UEFA Champions League
+  // Tier 2 — otras grandes citas (selecciones + Libertadores)
+  1: 2,    // World Cup
+  4: 2,    // UEFA Euro
+  9: 2,    // Copa America
   13: 2,   // Copa Libertadores
 
   // Tier 3 — top 5 europeas
@@ -42,8 +42,8 @@ const TIER_BY_LEAGUE: Record<number, number> = {
 };
 
 const TIER_WEIGHT: Record<number, number> = {
-  1: 1.30,
-  2: 1.20,
+  1: 1.40,
+  2: 1.25,
   3: 1.10,
   4: 1.00,
   5: 0.90,

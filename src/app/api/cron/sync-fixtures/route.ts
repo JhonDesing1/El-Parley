@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { fetchFixturesForLeague, fetchPredictionsForFixture, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
+import { fetchFixturesForLeague, fetchPredictionsForFixture, HIGH_PRIORITY_LEAGUE_IDS, currentSeasonForLeague } from "@/lib/api/api-football";
 import { notifyAdminError } from "@/lib/telegram/send";
 
 // Máximo de fixtures con predicción (xG) por ejecución.
@@ -60,14 +60,23 @@ export async function GET(req: NextRequest) {
 
   for (const league of sortedLeagues) {
     try {
+      // Temporada vigente calculada por fecha — ignoramos el valor de BD si
+      // está obsoleto (los seeds dejaron 2024 en todas las ligas y nunca se
+      // refrescaron, lo que en abril 2026 deja Champions sin fixtures).
+      const season = currentSeasonForLeague(league.id);
       const { fixtures, teams } = await fetchFixturesForLeague(
         league.id,
-        league.season,
+        season,
         from,
         to,
       );
-      console.log(`[sync-fixtures] league=${league.id} season=${league.season} → fixtures=${fixtures.length} teams=${teams.length}`);
-      debug.push({ league: league.id, season: league.season, fixtures: fixtures.length });
+      console.log(`[sync-fixtures] league=${league.id} season=${season} → fixtures=${fixtures.length} teams=${teams.length}`);
+      debug.push({ league: league.id, season, fixtures: fixtures.length });
+
+      // Mantén `leagues.season` sincronizada — otras consultas la pueden leer.
+      if (season !== league.season) {
+        await supabase.from("leagues").update({ season }).eq("id", league.id);
+      }
 
       // Upsert teams primero (FK)
       if (teams.length) {
