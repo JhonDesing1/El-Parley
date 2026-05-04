@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Zap, AlertTriangle } from "lucide-react";
+import Image from "next/image";
+import { AlertTriangle } from "lucide-react";
 
 export function Footer() {
   return (
@@ -38,12 +39,23 @@ export function Footer() {
 
       <div className="container grid gap-8 py-12 sm:grid-cols-2 md:grid-cols-4">
         <div className="md:col-span-2">
-          <Link href="/" className="flex items-center gap-2 font-display text-lg font-black uppercase">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Zap className="h-4 w-4" strokeWidth={3} />
-            </div>
-            <span className="bg-gradient-to-r from-primary to-primary/75 bg-clip-text text-transparent">
-              El Parley
+          <Link href="/" className="relative inline-flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-24 w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/55 blur-2xl"
+            />
+            <Image
+              src="/logo.png"
+              alt="El Parley"
+              width={161}
+              height={46}
+              className="relative h-[46px] w-auto"
+            />
+            <span
+              className="relative text-xl font-bold tracking-wide"
+              style={{ color: "#998728" }}
+            >
+              EL PARLEY
             </span>
           </Link>
           <p className="mt-3 max-w-sm text-sm text-muted-foreground">

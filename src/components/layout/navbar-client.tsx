@@ -59,7 +59,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
           />
           <span
             className="relative text-xl font-bold tracking-wide"
-            style={{ color: "#3D5A3E" }}
+            style={{ color: "#998728" }}
           >
             EL PARLEY
           </span>
@@ -142,7 +142,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
                 />
                 <span
                   className="relative text-lg font-bold tracking-wide"
-                  style={{ color: "#3D5A3E" }}
+                  style={{ color: "#998728" }}
                 >
                   EL PARLEY
                 </span>
