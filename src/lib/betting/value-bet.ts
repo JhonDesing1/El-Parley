@@ -17,6 +17,14 @@ export interface ValueBetInput {
   modelProb: number; // 0..1
   decimalOdds: number; // cuota ofrecida
   minEdge?: number; // default 0.03
+  /**
+   * Edge máximo aceptable para considerar la apuesta válida. Sin valor por
+   * defecto (i.e. ilimitado) en pruebas matemáticas, pero los crons en producción
+   * deberían pasar 0.20-0.25: un edge > 25% en mercados líquidos casi nunca
+   * es valor real, sino un error del modelo (xG erróneo, mercado especial,
+   * etc.). El bookmaker tiene mejor información que un Poisson genérico.
+   */
+  maxEdge?: number;
 }
 
 export interface ValueBetResult {
@@ -32,6 +40,7 @@ export function detectValueBet({
   modelProb,
   decimalOdds,
   minEdge = 0.03,
+  maxEdge,
 }: ValueBetInput): ValueBetResult {
   if (modelProb <= 0 || modelProb >= 1)
     throw new Error("modelProb fuera de rango");
@@ -52,8 +61,11 @@ export function detectValueBet({
   if (edge >= 0.08 && modelProb >= 0.4) confidence = "high";
   else if (edge >= 0.05) confidence = "medium";
 
+  const exceedsMax = maxEdge != null && edge > maxEdge;
+  const isValue = !exceedsMax && edge >= dynamicMinEdge;
+
   return {
-    isValue: edge >= dynamicMinEdge,
+    isValue,
     edge,
     expectedValue,
     kelly,

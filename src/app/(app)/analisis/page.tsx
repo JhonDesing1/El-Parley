@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
+import { removeVigMultiplicative } from "@/lib/betting/implied-probability";
 import {
   fetchNextFixtureForTeam,
   fetchPredictionsForFixture,
@@ -60,6 +61,44 @@ type RawMatchRow = {
 function normTeam(t: RawTeam | RawTeam[] | null | undefined): RawTeam | null {
   if (!t) return null;
   return Array.isArray(t) ? t[0] ?? null : t;
+}
+
+/**
+ * Promedio de probabilidades 1x2 de-vigadas a través de los bookmakers que
+ * cotizan los tres brazos para el partido. Sirve como referencia "consenso"
+ * para detectar cuándo el modelo Poisson está descalibrado (xG fallback,
+ * stale data, etc.).
+ *
+ * Devuelve null si ningún bookmaker tiene los tres precios — no podemos
+ * verificar el modelo sin un mercado liquido.
+ */
+async function fetch1x2Consensus(
+  // typed loosely to avoid leaking Supabase generics into this helper
+  supabase: { from: (t: string) => any },
+  matchId: number,
+): Promise<{ home: number; draw: number; away: number } | null> {
+  const { data } = await supabase
+    .from("odds")
+    .select("bookmaker_id, selection, price")
+    .eq("match_id", matchId)
+    .eq("market", "1x2");
+  if (!data?.length) return null;
+  type Triplet = { home?: number; draw?: number; away?: number };
+  const byBm = new Map<number, Triplet>();
+  for (const o of data as { bookmaker_id: number; selection: string; price: number }[]) {
+    if (o.selection !== "home" && o.selection !== "draw" && o.selection !== "away") continue;
+    if (!byBm.has(o.bookmaker_id)) byBm.set(o.bookmaker_id, {});
+    byBm.get(o.bookmaker_id)![o.selection as "home" | "draw" | "away"] = o.price;
+  }
+  let sumH = 0, sumD = 0, sumA = 0, n = 0;
+  for (const t of byBm.values()) {
+    if (t.home && t.draw && t.away) {
+      const [pH, pD, pA] = removeVigMultiplicative([t.home, t.draw, t.away]);
+      sumH += pH; sumD += pD; sumA += pA; n += 1;
+    }
+  }
+  if (n === 0) return null;
+  return { home: sumH / n, draw: sumD / n, away: sumA / n };
 }
 
 function formatPct(p: number) {
@@ -174,6 +213,37 @@ export default async function AnalisisPage({
         .maybeSingle();
       nextMatch = (matchRow ?? null) as RawMatchRow | null;
       matchInDb = nextMatch != null;
+
+      // Sanity check para fixtures en BD: si el xG almacenado proviene del
+      // fallback histórico de liga (legacy data), las probabilidades del
+      // modelo se alejan del consenso del bookmaker — y mostraríamos un
+      // análisis incorrecto (p.ej. "Pereira o Empate 71%" para el último de
+      // la tabla). Si detectamos esa discrepancia, anulamos los xG y la UI
+      // mostrará "Modelo aún no disponible" en lugar de números fabricados.
+      if (
+        nextMatch &&
+        nextMatch.model_expected_goals_home != null &&
+        nextMatch.model_expected_goals_away != null
+      ) {
+        const consensus = await fetch1x2Consensus(supabase, nextMatch.id);
+        if (consensus) {
+          const modelProbs = calculateMatchProbabilities(
+            nextMatch.model_expected_goals_home,
+            nextMatch.model_expected_goals_away,
+          );
+          if (
+            Math.abs(modelProbs.home - consensus.home) > 0.20 ||
+            Math.abs(modelProbs.draw - consensus.draw) > 0.20 ||
+            Math.abs(modelProbs.away - consensus.away) > 0.20
+          ) {
+            nextMatch = {
+              ...nextMatch,
+              model_expected_goals_home: null,
+              model_expected_goals_away: null,
+            };
+          }
+        }
+      }
 
       // Fallback: si la BD aún no tiene el fixture (liga fuera del cron),
       // lo pedimos a API-Football. Si el team_id de nuestra BD no coincide con

@@ -8,6 +8,7 @@ import {
   type CardProbabilities,
 } from "@/lib/betting/poisson";
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
+import { removeVigMultiplicative } from "@/lib/betting/implied-probability";
 import {
   LEAGUE_AVG_CORNERS,
   LEAGUE_AVG_CARDS,
@@ -82,6 +83,89 @@ const CARD_MARKET_PROB: Record<string, (p: CardProbabilities) => number> = {
   "over:4.5":  (p) => p.over45,
   "under:4.5": (p) => p.under45,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sanity check vs consenso del mercado
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Edge máximo aceptable. Por encima asumimos error de modelo, no valor. */
+const MAX_EDGE_REASONABLE = 0.25;
+
+/**
+ * Desviación máxima (en pp) entre la probabilidad del modelo y la
+ * probabilidad implícita "fair" del mercado (de-vigada). Si CUALQUIER
+ * brazo del 1x2 supera esto, el modelo está mal calibrado para este
+ * partido y rechazamos los mercados derivados de xG.
+ *
+ * 0.20 (20pp) tolera la ventaja real del modelo Poisson sin permitir
+ * disparates como el bug del Pereira (modelo decía 71% DC1X, mercado decía 35%).
+ */
+const MAX_MODEL_VS_MARKET_DEVIATION = 0.20;
+
+interface OddsRowLike {
+  bookmaker_id: number;
+  market: string;
+  selection: string;
+  price: number;
+}
+
+/**
+ * Calcula el consenso del mercado para 1x2 promediando las probabilidades
+ * de-vigadas de cada bookmaker. Devuelve null si no hay ningún bookmaker
+ * con los tres brazos (home/draw/away) cotizados.
+ */
+function marketConsensus1x2(
+  odds: OddsRowLike[],
+): { home: number; draw: number; away: number } | null {
+  type Triplet = { home?: number; draw?: number; away?: number };
+  const byBookmaker = new Map<number, Triplet>();
+
+  for (const o of odds) {
+    if (o.market !== "1x2") continue;
+    if (o.selection !== "home" && o.selection !== "draw" && o.selection !== "away") continue;
+    if (!byBookmaker.has(o.bookmaker_id)) byBookmaker.set(o.bookmaker_id, {});
+    byBookmaker.get(o.bookmaker_id)![o.selection as "home" | "draw" | "away"] = o.price;
+  }
+
+  let sumH = 0, sumD = 0, sumA = 0, n = 0;
+  for (const t of byBookmaker.values()) {
+    if (t.home && t.draw && t.away) {
+      const [pH, pD, pA] = removeVigMultiplicative([t.home, t.draw, t.away]);
+      sumH += pH; sumD += pD; sumA += pA; n += 1;
+    }
+  }
+  if (n === 0) return null;
+  return { home: sumH / n, draw: sumD / n, away: sumA / n };
+}
+
+/**
+ * Verdadero si el modelo se aleja del consenso del mercado en cualquiera
+ * de los tres brazos por más de MAX_MODEL_VS_MARKET_DEVIATION.
+ *
+ * Caso típico: con xG fallback (1.40, 1.10) el Poisson estima local≈45%
+ * sin importar el equipo. El mercado, que sí distingue, paga al
+ * último de la tabla a 6.50 (15% implícito). Diferencia: 30pp → flag.
+ */
+function modelFar1x2(
+  model: { home: number; draw: number; away: number },
+  market: { home: number; draw: number; away: number },
+): boolean {
+  return (
+    Math.abs(model.home - market.home) > MAX_MODEL_VS_MARKET_DEVIATION ||
+    Math.abs(model.draw - market.draw) > MAX_MODEL_VS_MARKET_DEVIATION ||
+    Math.abs(model.away - market.away) > MAX_MODEL_VS_MARKET_DEVIATION
+  );
+}
+
+/** Mercados cuyo modelo depende directamente de xG (afectados por el sanity check). */
+function isXgDerivedMarket(market: string): boolean {
+  return (
+    market === "double_chance" ||
+    market === "btts" ||
+    market.startsWith("over_under_") ||
+    market === "1x2"
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -268,6 +352,20 @@ export async function GET(req: NextRequest) {
     const odds = oddsByMatch.get(match.id);
     if (!odds?.length) continue;
 
+    // ── Sanity check: ¿el modelo concuerda con el consenso del mercado? ──
+    // Si nuestro xG produce probabilidades 1x2 muy alejadas de lo que cobran
+    // los bookmakers (de-vigado), el xG es ruido — típicamente el fallback
+    // de liga aplicado a equipos débiles. Marcamos los mercados derivados
+    // de xG como no confiables y solo procesamos córners/tarjetas, que se
+    // calculan con team_stats independientes.
+    const consensus = marketConsensus1x2(odds);
+    const xgUntrustworthy =
+      consensus !== null &&
+      modelFar1x2(
+        { home: goalProbs.home, draw: goalProbs.draw, away: goalProbs.away },
+        consensus,
+      );
+
     const bets: ValueBetInsert[] = [];
 
     for (const o of odds) {
@@ -278,6 +376,9 @@ export async function GET(req: NextRequest) {
       // ── Mercados de goles ─────────────────────────────────────────────────
       const goalKey = `${o.market}:${o.selection}` as GoalMarketKey;
       if (goalKey in GOAL_MARKET_PROB) {
+        // Si el xG no concuerda con el mercado, omitimos cualquier mercado
+        // derivado de él — la causa del bug "gana o empata Pereira".
+        if (xgUntrustworthy && isXgDerivedMarket(o.market)) continue;
         modelProb = GOAL_MARKET_PROB[goalKey](goalProbs);
       }
 
@@ -306,7 +407,11 @@ export async function GET(req: NextRequest) {
 
       let result;
       try {
-        result = detectValueBet({ modelProb, decimalOdds: o.price });
+        result = detectValueBet({
+          modelProb,
+          decimalOdds: o.price,
+          maxEdge: MAX_EDGE_REASONABLE,
+        });
       } catch {
         continue;
       }

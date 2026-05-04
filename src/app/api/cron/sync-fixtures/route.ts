@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
 
     for (const match of sortedNeedsXg) {
       try {
-        const preds = await fetchPredictionsForFixture(match.id);
+        const preds = await fetchPredictionsForFixture(match.id, match.league_id ?? undefined);
         if (!preds) continue;
 
         await supabase

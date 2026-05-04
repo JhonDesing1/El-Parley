@@ -4,7 +4,60 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { fetchOddsForFixtures, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-football";
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
+import { removeVigMultiplicative } from "@/lib/betting/implied-probability";
 import { notifyAdminError } from "@/lib/telegram/send";
+
+/**
+ * Sanity check vs consenso del mercado. Si el modelo Poisson (basado en xG)
+ * produce probabilidades 1x2 que difieren del de-vig promedio de los bookmakers
+ * por más de MAX_DEVIATION en cualquier brazo, asumimos que el xG está mal
+ * (típicamente, el fallback genérico de liga aplicado a un equipo débil) y
+ * omitimos los mercados derivados de xG.
+ *
+ * Edge >25% en mercados líquidos casi nunca es valor real: descartamos.
+ */
+const MAX_EDGE_REASONABLE = 0.25;
+const MAX_DEVIATION_VS_MARKET = 0.20;
+
+interface OddsForConsensus {
+  bookmaker_id: number;
+  market: string;
+  selection: string;
+  price: number;
+}
+
+function marketConsensus1x2(
+  odds: OddsForConsensus[],
+): { home: number; draw: number; away: number } | null {
+  type Triplet = { home?: number; draw?: number; away?: number };
+  const byBm = new Map<number, Triplet>();
+  for (const o of odds) {
+    if (o.market !== "1x2") continue;
+    if (o.selection !== "home" && o.selection !== "draw" && o.selection !== "away") continue;
+    if (!byBm.has(o.bookmaker_id)) byBm.set(o.bookmaker_id, {});
+    byBm.get(o.bookmaker_id)![o.selection as "home" | "draw" | "away"] = o.price;
+  }
+  let sumH = 0, sumD = 0, sumA = 0, n = 0;
+  for (const t of byBm.values()) {
+    if (t.home && t.draw && t.away) {
+      const [pH, pD, pA] = removeVigMultiplicative([t.home, t.draw, t.away]);
+      sumH += pH; sumD += pD; sumA += pA; n += 1;
+    }
+  }
+  if (n === 0) return null;
+  return { home: sumH / n, draw: sumD / n, away: sumA / n };
+}
+
+function modelFar1x2(
+  m: { home: number; draw: number; away: number },
+  c: { home: number; draw: number; away: number },
+): boolean {
+  return (
+    Math.abs(m.home - c.home) > MAX_DEVIATION_VS_MARKET ||
+    Math.abs(m.draw - c.draw) > MAX_DEVIATION_VS_MARKET ||
+    Math.abs(m.away - c.away) > MAX_DEVIATION_VS_MARKET
+  );
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -126,6 +179,18 @@ export async function GET(req: NextRequest) {
           .eq("match_id", m.id);
 
         if (currentOdds?.length) {
+          // Si el modelo se aleja del mercado en 1x2, todos los mercados aquí
+          // (over/under, btts, double_chance) son derivados del mismo xG —
+          // saltamos el partido entero. sync-live-odds no procesa córners ni
+          // tarjetas, así que no perdemos ninguna detección legítima.
+          const consensus = marketConsensus1x2(currentOdds);
+          if (consensus !== null && modelFar1x2(
+            { home: probs.home, draw: probs.draw, away: probs.away },
+            consensus,
+          )) {
+            return { matchId: m.id, odds: odds.length, newBets: 0 };
+          }
+
           const bets = [];
           for (const o of currentOdds) {
             const key = `${o.market}:${o.selection}` as MarketKey;
@@ -134,7 +199,11 @@ export async function GET(req: NextRequest) {
 
             let result;
             try {
-              result = detectValueBet({ modelProb: probGetter(probs), decimalOdds: o.price });
+              result = detectValueBet({
+                modelProb: probGetter(probs),
+                decimalOdds: o.price,
+                maxEdge: MAX_EDGE_REASONABLE,
+              });
             } catch {
               continue;
             }

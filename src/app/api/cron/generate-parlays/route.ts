@@ -311,6 +311,10 @@ export async function GET(req: NextRequest) {
     minLegs: 2,
     maxLegs: 3,
     minCombinedProb: 0.40,
+    minIndividualProb: 0.70,
+    // Free parlay = "todas las piernas son seguras". Cap duro a 1.70
+    // (≈ 59% prob fair) para evitar mezclar un banker con un moonshot.
+    maxIndividualOdds: 1.70,
   });
 
   const usedMatchIds = new Set<number>();
@@ -360,6 +364,12 @@ export async function GET(req: NextRequest) {
     minLegs: 3,
     maxLegs: 5,
     minCombinedProb: 0.25,
+    minIndividualProb: 0.65,
+    // Premium permite un poco más de cuota por pierna que el free, pero
+    // sin moonshots: el techo a 1.90 mantiene cada pierna en zona "favorito"
+    // (≥ ~53% fair) y el producto se hace por número de piernas, no por una
+    // pata especulativa.
+    maxIndividualOdds: 1.90,
   });
 
   if (premiumLegs && premiumLegs.length >= 2) {
@@ -413,6 +423,11 @@ export async function GET(req: NextRequest) {
     targetOdds: 3.5,
     minCombinedProb: 0.65,
     minIndividualProb: 0.85,
+    // Cuota fair para prob 0.85 = 1.176; con edge típico real (5-15%) la
+    // cuota ofrecida sube a ~1.20-1.35. Cap a 1.45 evita aceptar piernas de
+    // alta prob pero cuota inflada (que serían más síntoma de modelo
+    // descalibrado que de valor real).
+    maxIndividualOdds: 1.45,
   });
 
   if (combinada80Legs && combinada80Legs.length >= 2) {
@@ -462,18 +477,22 @@ export async function GET(req: NextRequest) {
     if (id) generatedIds.push(id);
   }
 
-  // ── FunBet del día: cuota acumulada objetivo ≈ 30, entretenimiento ────────
-  // Usa TODOS los candidatos (any confidence) ordenados por cuota descendente
-  const allCandidatesForFun = [...allCandidates].sort(
-    (a, b) => b.decimalOdds - a.decimalOdds,
-  );
-
-  const funBetLegs = generateFunBet(allCandidatesForFun, {
-    targetOdds: 30,
+  // ── FunBet del día: combinada multi-pierna con bankers ───────────────────
+  // Filosofía: muchas piernas con cuota baja (cada una alta prob) se
+  // multiplican hasta dar una cuota total atractiva. Reemplaza el FunBet
+  // anterior que mezclaba un moonshot con bankers — patrón que reducía
+  // muchísimo la probabilidad combinada.
+  const funBetLegs = generateFunBet(allCandidates, {
+    targetOdds: 12,
+    minLegs: 4,
     maxLegs: 10,
+    minIndividualProb: 0.60,
+    minIndividualOdds: 1.25,
+    maxIndividualOdds: 1.75,
+    minCombinedProb: 0.10,
   });
 
-  if (funBetLegs && funBetLegs.length >= 2) {
+  if (funBetLegs && funBetLegs.length >= 4) {
     const funWithMeta = funBetLegs.map(
       (l) => allCandidates.find(
         (c) => c.matchId === l.matchId && c.market === l.market && c.selection === l.selection,
@@ -481,11 +500,12 @@ export async function GET(req: NextRequest) {
     );
 
     const funTotalOdds = funBetLegs.reduce((p, l) => p * l.decimalOdds, 1);
+    const funCombinedProb = funBetLegs.reduce((p, l) => p * (l.modelProb ?? 0), 1);
 
     const id = await insertParlay(
       funWithMeta,
       `FunBet del día · x${funTotalOdds.toFixed(1)}`,
-      `Combinada de alto riesgo para los que quieren emoción. ${funBetLegs.length} selecciones. Cuota total estimada: x${funTotalOdds.toFixed(1)}.`,
+      `${funBetLegs.length} bankers combinados. Cada pierna con alta probabilidad — la cuota total x${funTotalOdds.toFixed(1)} sale del producto, no de mezclar moonshots. Probabilidad combinada estimada: ${(funCombinedProb * 100).toFixed(0)}%.`,
       "free",
     );
 

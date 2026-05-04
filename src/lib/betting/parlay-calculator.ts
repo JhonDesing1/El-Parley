@@ -59,6 +59,23 @@ export function calculateParlay(legs: ParlayLeg[]): ParlayResult {
     );
   }
 
+  // Pierna desbalanceada: si hay una cuota >2x el promedio del resto, es una
+  // pierna de mucha menor probabilidad mezclada con bankers, y arrastra la
+  // probabilidad combinada hacia abajo aunque las demás sean seguras.
+  if (legs.length >= 3) {
+    const oddsList = legs.map((l) => l.decimalOdds);
+    for (let i = 0; i < oddsList.length; i++) {
+      const others = oddsList.filter((_, j) => j !== i);
+      const avgOthers = others.reduce((s, o) => s + o, 0) / others.length;
+      if (oddsList[i] > avgOthers * 2 && oddsList[i] >= 2.0) {
+        warnings.push(
+          `La pierna #${i + 1} (cuota ${oddsList[i].toFixed(2)}) tiene cuota más del doble del promedio del resto (${avgOthers.toFixed(2)}). Es la pierna más débil del parlay y reduce mucho la probabilidad combinada.`,
+        );
+        break;
+      }
+    }
+  }
+
   const allHaveModel = legs.every((l) => l.modelProb !== undefined);
   if (allHaveModel) {
     const combinedModelProb = legs.reduce(
@@ -100,18 +117,38 @@ export function generateValueParlay(
       priorityWeight?: number;
     }
   >,
-  options: { targetOdds?: number; minCombinedProb?: number; minIndividualProb?: number } = {},
+  options: {
+    targetOdds?: number;
+    minCombinedProb?: number;
+    minIndividualProb?: number;
+    /**
+     * Cuota individual máxima por pierna. La idea de una "Combinada Segura"
+     * es que cada pierna sea un banker (~1.20–1.50) — no permitimos colar
+     * una pierna a 2.0+ aunque su modelProb pase el filtro: arrastra la
+     * coherencia del producto y descuadra la promesa al usuario.
+     */
+    maxIndividualOdds?: number;
+  } = {},
 ): ParlayLeg[] | null {
   // Defaults coherentes: con minIndividualProb=0.82 y 2 piernas la combinada
   // máxima es 0.67 — exigir 0.80 hacía que esta función nunca devolviera
   // parlay. Bajamos el suelo a 0.65 para que matemáticamente sea alcanzable
   // y mantenemos el filtro individual estricto.
-  const { targetOdds = 3.5, minCombinedProb = 0.65, minIndividualProb = 0.82 } = options;
+  const {
+    targetOdds = 3.5,
+    minCombinedProb = 0.65,
+    minIndividualProb = 0.82,
+    maxIndividualOdds = 1.50,
+  } = options;
 
   // priorityWeight (>1 = competición top, <1 = liga menor) sólo afecta al
   // orden — la matemática combinada sigue usando modelProb crudo.
   const filtered = candidates
-    .filter((c) => (c.modelProb ?? 0) >= minIndividualProb)
+    .filter(
+      (c) =>
+        (c.modelProb ?? 0) >= minIndividualProb &&
+        c.decimalOdds <= maxIndividualOdds,
+    )
     .sort(
       (a, b) =>
         (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
@@ -148,13 +185,25 @@ export function generateValueParlay(
 }
 
 /**
- * Genera el "FunBet del día": combinada de alto riesgo / alta recompensa.
- * Sin restricción de probabilidad combinada — es entretenimiento puro.
+ * Genera el "FunBet del día": combinada multi-pierna donde cada pierna es un
+ * banker (alta probabilidad, cuota baja), pero el producto da una cuota
+ * llamativa.
+ *
+ * Filosofía: en vez de mezclar piernas con cuotas dispares (1.20 + 1.30 +
+ * 5.0) — que hace caer la probabilidad combinada — todas las piernas son
+ * "1.30-1.60", y la cuota total atractiva sale del número de piernas. Por
+ * ejemplo, 8 piernas a 1.40 promedio dan ~14.8x con probabilidad combinada
+ * mucho más realista que un parlay de 4 con un moonshot de 5.0 dentro.
  *
  * Algoritmo:
- * 1. Toma todos los candidatos ordenados por cuota individual descendente
- * 2. Acumula hasta que el producto de cuotas alcance el targetOdds (≥70%)
- * 3. Máximo maxLegs piernas
+ *  1. Filtra candidatos con `modelProb ≥ minIndividualProb` y cuota dentro
+ *     de [minIndividualOdds, maxIndividualOdds].
+ *  2. Deduplica por partido (un bet por partido).
+ *  3. Ordena por modelProb DESC × priorityWeight (los bankers más sólidos
+ *     primero, con preferencia por competiciones top).
+ *  4. Acumula piernas mientras la cuota combinada no supere targetOdds y la
+ *     combinada de modelo no caiga por debajo de minCombinedProb.
+ *  5. Devuelve null si no se alcanza al menos `minLegs` con cuota ≥ targetOdds×0.7.
  */
 export function generateFunBet(
   candidates: Array<
@@ -164,9 +213,26 @@ export function generateFunBet(
       priorityWeight?: number;
     }
   >,
-  options: { targetOdds?: number; maxLegs?: number } = {},
+  options: {
+    targetOdds?: number;
+    minLegs?: number;
+    maxLegs?: number;
+    minIndividualProb?: number;
+    minIndividualOdds?: number;
+    maxIndividualOdds?: number;
+    /** Probabilidad combinada mínima del modelo. Por debajo ya no es "fun" sino lotería. */
+    minCombinedProb?: number;
+  } = {},
 ): ParlayLeg[] | null {
-  const { targetOdds = 30, maxLegs = 10 } = options;
+  const {
+    targetOdds = 12,
+    minLegs = 4,
+    maxLegs = 10,
+    minIndividualProb = 0.65,
+    minIndividualOdds = 1.25,
+    maxIndividualOdds = 1.70,
+    minCombinedProb = 0.10,
+  } = options;
 
   // Deduplicar por matchId (un único bet por partido)
   const seenMatches = new Set<number>();
@@ -176,31 +242,52 @@ export function generateFunBet(
     return true;
   });
 
-  // Cuota descendente con un empuje por priorityWeight para que ante cuotas
-  // similares pesen las competiciones top.
-  const sorted = [...deduped]
-    .filter((c) => c.decimalOdds >= 1.25)
+  // Filtra por banda de cuota y prob individual; ordena por banker más sólido
+  // primero, ponderado por competición.
+  const sorted = deduped
+    .filter(
+      (c) =>
+        (c.modelProb ?? 0) >= minIndividualProb &&
+        c.decimalOdds >= minIndividualOdds &&
+        c.decimalOdds <= maxIndividualOdds,
+    )
     .sort(
       (a, b) =>
-        b.decimalOdds * (b.priorityWeight ?? 1) -
-        a.decimalOdds * (a.priorityWeight ?? 1),
+        (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
     );
 
-  if (sorted.length < 2) return null;
+  if (sorted.length < minLegs) return null;
 
   const selected: typeof sorted = [];
   let combinedOdds = 1;
+  let combinedProb = 1;
 
   for (const leg of sorted) {
     if (selected.length >= maxLegs) break;
+    const newOdds = combinedOdds * leg.decimalOdds;
+    const newProb = combinedProb * (leg.modelProb ?? 0);
+
+    // No exceder targetOdds: una vez que la cuota combinada ya rebasa el
+    // objetivo, parar — agregar una pierna más sería innecesariamente
+    // riesgoso aunque cumpliera el filtro.
+    if (selected.length >= minLegs && newOdds > targetOdds * 1.10) break;
+
+    // Probabilidad combinada por debajo del piso: paramos antes de
+    // degradar el parlay a lotería.
+    if (selected.length >= minLegs && newProb < minCombinedProb) break;
+
     selected.push(leg);
-    combinedOdds *= leg.decimalOdds;
-    if (combinedOdds >= targetOdds * 0.80) break;
+    combinedOdds = newOdds;
+    combinedProb = newProb;
+
+    // Alcanzamos el target → corte limpio
+    if (selected.length >= minLegs && combinedOdds >= targetOdds) break;
   }
 
-  if (selected.length < 2) return null;
-  // Debe alcanzar al menos el 60% del target
-  if (combinedOdds < targetOdds * 0.60) return null;
+  if (selected.length < minLegs) return null;
+  // Sin alcanzar al menos el 70% del target la cuota es poco atractiva
+  if (combinedOdds < targetOdds * 0.70) return null;
 
   return selected;
 }
@@ -231,11 +318,22 @@ export function generatePremium90Parlays(
   const MIN_COMBINED_PROB = 0.90;
   const MIN_TOTAL_ODDS = 1.60;
   const MIN_INDIVIDUAL_PROB = 0.88;
+  // Tope de cuota por pierna: con prob ≥ 0.88 la cuota fair máxima es 1.136.
+  // Con el cap de edge del modelo (0.25) la cuota real máxima esperable es
+  // ~1.42. Ponemos 1.40 como techo duro para evitar que una pierna con
+  // prob=0.88 pero cuota=1.80 (escenario raro pero posible con xG legacy)
+  // se cuele en una "Combinada 90%".
+  const MAX_INDIVIDUAL_ODDS = 1.40;
 
   // Pre-orden por modelProb × priorityWeight: la franja top del pool tira de
   // competiciones importantes, manteniendo el filtro de prob individual.
   const filtered = candidates
-    .filter((c) => (c.modelProb ?? 0) >= MIN_INDIVIDUAL_PROB && c.decimalOdds >= 1.10)
+    .filter(
+      (c) =>
+        (c.modelProb ?? 0) >= MIN_INDIVIDUAL_PROB &&
+        c.decimalOdds >= 1.10 &&
+        c.decimalOdds <= MAX_INDIVIDUAL_ODDS,
+    )
     .sort(
       (a, b) =>
         (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
@@ -329,13 +427,36 @@ export function generateDailyParlay(
     minLegs?: number;
     maxLegs?: number;
     minCombinedProb?: number;
+    /** Probabilidad individual mínima por pierna. */
+    minIndividualProb?: number;
+    /**
+     * Cuota máxima por pierna. Evita mezclar bankers (1.30) con un moonshot
+     * (4.0) dentro del mismo parlay — que es lo que en la práctica hace caer
+     * la probabilidad combinada y rompe la promesa de "todas las piernas son
+     * seguras".
+     */
+    maxIndividualOdds?: number;
   } = {},
 ): ParlayLeg[] | null {
-  const { minLegs = 2, maxLegs = 4, minCombinedProb = 0.35 } = options;
+  const {
+    minLegs = 2,
+    maxLegs = 4,
+    minCombinedProb = 0.35,
+    minIndividualProb = 0.65,
+    maxIndividualOdds = 1.80,
+  } = options;
 
-  // Solo high/medium confidence con prob individual > 55%
+  // Solo high/medium confidence; prob individual ≥ piso; cuota individual ≤ techo.
+  // El piso a 0.65 reemplaza el viejo 0.55: evita que una pierna con 56% de
+  // probabilidad (cuota fair ~1.78) entre como pierna "segura" en una
+  // combinada que el usuario espera de bankers.
   const filtered = candidates
-    .filter((c) => c.confidence !== "low" && (c.modelProb ?? 0) > 0.55)
+    .filter(
+      (c) =>
+        c.confidence !== "low" &&
+        (c.modelProb ?? 0) >= minIndividualProb &&
+        c.decimalOdds <= maxIndividualOdds,
+    )
     .sort((a, b) => {
       // Score = modelProb * (1 + edge) * priorityWeight (tier de competición).
       // El priorityWeight sólo influye en el orden, no en la matemática
@@ -361,7 +482,11 @@ export function generateDailyParlay(
     }
   }
 
-  // Si no alcanzamos el umbral pero tenemos suficientes legs, devolver igualmente
-  // (el display mostrará la prob real, el usuario decide)
-  return selected.length >= minLegs ? selected : null;
+  // Devolver null si no alcanzamos el umbral combinado: el cron debería
+  // saltarse este partido en vez de publicar una combinada que no cumple la
+  // promesa de probabilidad. (Antes se devolvía igualmente, lo que generaba
+  // parlays con `combinedProb << minCombinedProb` y rompía expectativas.)
+  if (selected.length < minLegs) return null;
+  if (combinedProb < minCombinedProb) return null;
+  return selected;
 }

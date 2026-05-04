@@ -620,9 +620,15 @@ function poissonFit(
 }
 
 /**
- * xG promedio por liga para usar como fallback cuando el endpoint /predictions
- * no devuelve valores válidos. Basado en promedios históricos de goles/partido
- * en temporadas recientes (fuente: FBRef/Understat agregados).
+ * xG promedio por liga — sólo se usa como ESCALA al derivar xG desde la
+ * predicción de porcentajes 1x2 (paso 2). El home/away ratio viene de la
+ * derivación específica del partido; estos valores únicamente normalizan
+ * el total al rango realista de la liga.
+ *
+ * NO se usan como fallback final: si /predictions no devuelve nada útil,
+ * preferimos retornar null antes que asumir un xG genérico de liga
+ * (eso producía "value bets" para equipos débiles porque a un Pereira
+ * último de la tabla le aplicábamos el mismo xG que a un puntero).
  *
  * Formato: [homeXg, awayXg]
  */
@@ -639,13 +645,28 @@ const LEAGUE_AVG_XG: Record<number, [number, number]> = {
   239: [1.35, 1.10], // Liga BetPlay Colombia
 };
 
-const DEFAULT_XG: [number, number] = [1.40, 1.10]; // fallback genérico
+const DEFAULT_LEAGUE_AVG_XG: [number, number] = [1.40, 1.10];
 
 /**
- * Devuelve los xG estimados para un fixture.
- * Intenta el endpoint /predictions de API-Football primero; si retorna
- * valores inválidos (negativos o cero), usa promedios históricos por liga
- * como fallback razonable para el modelo Poisson.
+ * Devuelve los xG estimados para un fixture, o `null` cuando API-Football
+ * no entrega una predicción específica del partido.
+ *
+ * Estrategia (en orden):
+ *  1. Toma `predictions.goals.home/away` si vienen explícitos y > 0.
+ *  2. Si hay `predictions.percent` (1x2), deriva xG por grid-search Poisson
+ *     y escala el total al promedio de la liga.
+ *  3. Si nada de lo anterior está disponible, retorna `null`.
+ *
+ * Antes existía un paso 3 que devolvía `LEAGUE_AVG_XG[leagueId]` como
+ * último recurso. Eso producía "value bets" tóxicas: con xG genérico
+ * (~1.4 home / 1.1 away) el Poisson estima ~71% para "local o empate"
+ * sea cual sea el partido — y los bookmakers, que SÍ saben quién es
+ * último de la tabla, ofrecen 1X de equipos débiles a cuotas altas.
+ * El edge resultante (>50%) era ruido del modelo, no valor real.
+ *
+ * Con `null` los crons saltan el match (sólo procesan los que tienen xG)
+ * y la página /analisis muestra "Modelo aún no disponible" en lugar de
+ * un análisis fabricado.
  */
 export async function fetchPredictionsForFixture(
   fixtureId: number,
@@ -674,7 +695,8 @@ export async function fetchPredictionsForFixture(
         const pa = parseFloat(pct.away) / 100;
         const derived = deriveXgFromProbabilities(ph, pd, pa);
         if (derived) {
-          const [leagueHome, leagueAway] = (leagueId ? LEAGUE_AVG_XG[leagueId] : null) ?? DEFAULT_XG;
+          const [leagueHome, leagueAway] =
+            (leagueId ? LEAGUE_AVG_XG[leagueId] : null) ?? DEFAULT_LEAGUE_AVG_XG;
           const leagueTotal = leagueHome + leagueAway;
           const derivedTotal = derived.homeXg + derived.awayXg;
           const scale = leagueTotal / derivedTotal;
@@ -686,12 +708,11 @@ export async function fetchPredictionsForFixture(
       }
     }
   } catch {
-    // Fallo silencioso — pasamos al fallback
+    // Fallo silencioso — caemos al return null
   }
 
-  // 3. Fallback: promedios históricos por liga (genéricos, sin calidad de equipo)
-  const [homeXg, awayXg] = (leagueId ? LEAGUE_AVG_XG[leagueId] : null) ?? DEFAULT_XG;
-  return { homeXg, awayXg };
+  // Sin predicción específica del partido. Mejor null que xG genérico.
+  return null;
 }
 
 /**
