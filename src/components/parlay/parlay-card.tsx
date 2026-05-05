@@ -4,33 +4,12 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+import { marketLabel, selectionLabel } from "@/lib/utils/market-label";
 import type { Parlay } from "@/types";
 
 interface ParlayCardProps {
   parlay: Parlay;
   isLocked?: boolean;
-}
-
-const MARKET_LABELS: Record<string, string> = {
-  "1x2": "1X2",
-  btts: "Ambos anotan",
-  over_under_2_5: "Más/Menos 2.5",
-  over_under_1_5: "Más/Menos 1.5",
-  double_chance: "Doble oportunidad",
-  draw_no_bet: "Empate anula apuesta",
-  asian_handicap: "Handicap asiático",
-  correct_score: "Marcador exacto",
-};
-
-const SELECTION_LABELS: Record<string, Record<string, string>> = {
-  "1x2": { home: "Local", draw: "Empate", away: "Visitante" },
-  btts: { yes: "Sí", no: "No" },
-  over_under_2_5: { over: "Más 2.5", under: "Menos 2.5" },
-  over_under_1_5: { over: "Más 1.5", under: "Menos 1.5" },
-};
-
-function legLabel(market: string, selection: string): string {
-  return SELECTION_LABELS[market]?.[selection] ?? selection;
 }
 
 function formatValidUntil(dateStr: string): string {
@@ -139,8 +118,12 @@ export function ParlayCard({ parlay, isLocked = false }: ParlayCardProps) {
                   <div className="truncate text-sm font-semibold">
                     {leg.match.home_team.name} vs {leg.match.away_team.name}
                   </div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {MARKET_LABELS[leg.market] ?? leg.market} · {legLabel(leg.market, leg.selection)}
+                  <div className="text-xs text-muted-foreground">
+                    {marketLabel(leg.market)} ·{" "}
+                    {selectionLabel(leg.market, leg.selection, {
+                      home: leg.match.home_team.name,
+                      away: leg.match.away_team.name,
+                    })}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

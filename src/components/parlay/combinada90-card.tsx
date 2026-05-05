@@ -3,24 +3,8 @@ import { Lock, Star, TrendingUp, Clock, CheckCircle2, XCircle } from "lucide-rea
 import { Card, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+import { marketLabel, selectionLabel } from "@/lib/utils/market-label";
 import type { Parlay } from "@/types";
-
-const MARKET_LABELS: Record<string, string> = {
-  "1x2": "1X2",
-  btts: "Ambos anotan",
-  over_under_2_5: "Más/Menos 2.5",
-  over_under_1_5: "Más/Menos 1.5",
-  double_chance: "Doble oportunidad",
-  draw_no_bet: "Empate anula apuesta",
-  asian_handicap: "Handicap asiático",
-};
-
-const SELECTION_LABELS: Record<string, Record<string, string>> = {
-  "1x2": { home: "Local", draw: "Empate", away: "Visitante" },
-  btts: { yes: "Sí", no: "No" },
-  over_under_2_5: { over: "Más 2.5", under: "Menos 2.5" },
-  over_under_1_5: { over: "Más 1.5", under: "Menos 1.5" },
-};
 
 const LEG_STATUS_ICON = {
   won: <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-amber-400" />,
@@ -129,8 +113,6 @@ export function Combinada90Card({ parlay, isLocked = false }: Combinada90CardPro
         <div className="space-y-2">
           {parlay.legs.map((leg, idx) => {
             const legResult = (leg.result ?? "pending") as keyof typeof LEG_STATUS_ICON;
-            const selLabel =
-              SELECTION_LABELS[leg.market]?.[leg.selection] ?? leg.selection;
             const modelProb = (leg as any).model_prob as number | null;
             return (
               <div
@@ -144,8 +126,12 @@ export function Combinada90Card({ parlay, isLocked = false }: Combinada90CardPro
                   <div className="truncate text-sm font-semibold">
                     {leg.match.home_team.name} vs {leg.match.away_team.name}
                   </div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {MARKET_LABELS[leg.market] ?? leg.market} · {selLabel}
+                  <div className="text-xs text-muted-foreground">
+                    {marketLabel(leg.market)} ·{" "}
+                    {selectionLabel(leg.market, leg.selection, {
+                      home: leg.match.home_team.name,
+                      away: leg.match.away_team.name,
+                    })}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
