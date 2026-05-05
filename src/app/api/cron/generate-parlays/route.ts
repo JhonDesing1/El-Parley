@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet, generatePremium90Parlays } from "@/lib/betting/parlay-calculator";
 import { marketRank, marketWeight } from "@/lib/betting/market-priority";
-import { leagueTier, leagueWeight } from "@/lib/betting/league-priority";
+import { leagueTier, leagueWeight, CHAMPIONS_LEAGUE_ID } from "@/lib/betting/league-priority";
 import type { Database } from "@/types/database";
 import { notifyProUsers } from "@/lib/telegram/send";
 
@@ -67,6 +67,10 @@ type Candidate = {
   // Peso por tier de competición — sólo afecta ordenación, no la matemática
   // combinada de los parlays.
   priorityWeight: number;
+  // Tier numérico (1 = Champions, mejor). Los helpers ordenan por este campo
+  // primero, garantizando que Champions y otras competiciones top encabecen
+  // SIEMPRE el pool antes de aplicar el score por modelProb × peso.
+  priorityTier: number;
 };
 
 function buildParlayTitle(legs: Candidate[], matchMap: Map<number, MatchRow>): string {
@@ -104,20 +108,26 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminClient();
   const now = new Date();
 
-  // Idempotency guard: skip if parlays already generated today (UTC)
+  // Idempotency guard: skip sólo si HAY parlays activos del día (no expirados).
+  // Si los parlays generados antes hoy ya expiraron (sus matches terminaron),
+  // dejamos que el cron regenere para los partidos que vienen — antes este guard
+  // miraba sólo `created_at >= todayUTC`, lo que dejaba la página vacía toda la
+  // tarde cuando los parlays de la mañana caducaban.
   const todayUTC = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   );
   const { count: existingCount } = await supabase
     .from("parlays")
     .select("id", { count: "exact", head: true })
-    .gte("created_at", todayUTC.toISOString());
+    .gte("created_at", todayUTC.toISOString())
+    .gte("valid_until", now.toISOString());
 
   if ((existingCount ?? 0) > 0) {
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: "parlays already generated today",
+      reason: "active parlays already generated today",
+      activeCount: existingCount,
       timestamp: now.toISOString(),
     });
   }
@@ -228,8 +238,13 @@ export async function GET(req: NextRequest) {
       edge: vb.edge ?? 0,
       leagueId: lid,
       priorityWeight: leagueWeight(lid),
+      priorityTier: leagueTier(lid),
     };
   });
+
+  const championsCount = allCandidates.filter(
+    (c) => c.leagueId === CHAMPIONS_LEAGUE_ID,
+  ).length;
 
   const generatedIds: string[] = [];
 
@@ -305,7 +320,17 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Free parlay: non-premium bets (high edge, visible para todos) ─
-  const freeCandidates = allCandidates.filter((c) => !c.is_premium);
+  // Pre-orden por tier de competición — Champions encabeza el pool incluso si
+  // hay un partido de liga menor con mayor probabilidad bruta. Los helpers
+  // respetan el `priorityTier` como clave primaria de orden.
+  const freeCandidates = allCandidates
+    .filter((c) => !c.is_premium)
+    .sort((a, b) => {
+      if (a.priorityTier !== b.priorityTier) return a.priorityTier - b.priorityTier;
+      const sa = (a.modelProb ?? 0) * (1 + a.edge) * marketWeight(a.market);
+      const sb = (b.modelProb ?? 0) * (1 + b.edge) * marketWeight(b.market);
+      return sb - sa;
+    });
 
   const freeLegs = generateDailyParlay(freeCandidates, {
     minLegs: 2,
@@ -526,6 +551,7 @@ export async function GET(req: NextRequest) {
     generated: generatedIds.length,
     parlayIds: generatedIds,
     candidatesEvaluated: allCandidates.length,
+    championsCandidates: championsCount,
     timestamp: now.toISOString(),
   });
 }

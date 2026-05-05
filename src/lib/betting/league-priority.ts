@@ -42,8 +42,8 @@ const TIER_BY_LEAGUE: Record<number, number> = {
 };
 
 const TIER_WEIGHT: Record<number, number> = {
-  1: 1.40,
-  2: 1.25,
+  1: 1.60,
+  2: 1.30,
   3: 1.10,
   4: 1.00,
   5: 0.90,
@@ -51,6 +51,9 @@ const TIER_WEIGHT: Record<number, number> = {
 };
 
 const FALLBACK_TIER = 6;
+
+/** ID de la UEFA Champions League en API-Football y `public.leagues.id`. */
+export const CHAMPIONS_LEAGUE_ID = 2;
 
 export function leagueTier(leagueId: number | null | undefined): number {
   if (leagueId == null) return FALLBACK_TIER;

@@ -115,6 +115,12 @@ export function generateValueParlay(
       confidence: "low" | "medium" | "high";
       edge?: number;
       priorityWeight?: number;
+      /**
+       * Tier numérico de la competición (1 = Champions, mejor). Si está
+       * presente, se usa como clave primaria de orden — Champions encabeza
+       * el pool antes que cualquier otra liga, sin importar el score crudo.
+       */
+      priorityTier?: number;
     }
   >,
   options: {
@@ -141,19 +147,25 @@ export function generateValueParlay(
     maxIndividualOdds = 1.50,
   } = options;
 
-  // priorityWeight (>1 = competición top, <1 = liga menor) sólo afecta al
-  // orden — la matemática combinada sigue usando modelProb crudo.
+  // priorityTier (1 = Champions, mejor) ordena primero — Champions y demás
+  // competiciones top encabezan el pool sin que un partido de liga menor con
+  // mayor probabilidad bruta los desplace. priorityWeight refina el orden
+  // dentro del mismo tier. La matemática combinada sigue usando modelProb crudo.
   const filtered = candidates
     .filter(
       (c) =>
         (c.modelProb ?? 0) >= minIndividualProb &&
         c.decimalOdds <= maxIndividualOdds,
     )
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      const tierA = a.priorityTier ?? 99;
+      const tierB = b.priorityTier ?? 99;
+      if (tierA !== tierB) return tierA - tierB;
+      return (
         (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
-        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
-    );
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1)
+      );
+    });
 
   if (filtered.length < 2) return null;
 
@@ -211,6 +223,7 @@ export function generateFunBet(
       confidence: "low" | "medium" | "high";
       edge?: number;
       priorityWeight?: number;
+      priorityTier?: number;
     }
   >,
   options: {
@@ -242,8 +255,8 @@ export function generateFunBet(
     return true;
   });
 
-  // Filtra por banda de cuota y prob individual; ordena por banker más sólido
-  // primero, ponderado por competición.
+  // Filtra por banda de cuota y prob individual; ordena por tier de competición
+  // primero (Champions encabeza), luego por banker más sólido dentro del tier.
   const sorted = deduped
     .filter(
       (c) =>
@@ -251,11 +264,15 @@ export function generateFunBet(
         c.decimalOdds >= minIndividualOdds &&
         c.decimalOdds <= maxIndividualOdds,
     )
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      const tierA = a.priorityTier ?? 99;
+      const tierB = b.priorityTier ?? 99;
+      if (tierA !== tierB) return tierA - tierB;
+      return (
         (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
-        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
-    );
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1)
+      );
+    });
 
   if (sorted.length < minLegs) return null;
 
@@ -311,6 +328,7 @@ export function generatePremium90Parlays(
       confidence: "low" | "medium" | "high";
       edge?: number;
       priorityWeight?: number;
+      priorityTier?: number;
     }
   >,
   count = 4,
@@ -325,8 +343,9 @@ export function generatePremium90Parlays(
   // se cuele en una "Combinada 90%".
   const MAX_INDIVIDUAL_ODDS = 1.40;
 
-  // Pre-orden por modelProb × priorityWeight: la franja top del pool tira de
-  // competiciones importantes, manteniendo el filtro de prob individual.
+  // Pre-orden por tier de competición primero (Champions encabeza), luego por
+  // modelProb × priorityWeight dentro del mismo tier. Así el pool de top-25 que
+  // se usa para combinatoria está dominado por competiciones importantes.
   const filtered = candidates
     .filter(
       (c) =>
@@ -334,11 +353,15 @@ export function generatePremium90Parlays(
         c.decimalOdds >= 1.10 &&
         c.decimalOdds <= MAX_INDIVIDUAL_ODDS,
     )
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      const tierA = a.priorityTier ?? 99;
+      const tierB = b.priorityTier ?? 99;
+      if (tierA !== tierB) return tierA - tierB;
+      return (
         (b.modelProb ?? 0) * (b.priorityWeight ?? 1) -
-        (a.modelProb ?? 0) * (a.priorityWeight ?? 1),
-    );
+        (a.modelProb ?? 0) * (a.priorityWeight ?? 1)
+      );
+    });
 
   if (filtered.length < 2) return [];
 
@@ -421,6 +444,7 @@ export function generateDailyParlay(
       confidence: "low" | "medium" | "high";
       edge?: number;
       priorityWeight?: number;
+      priorityTier?: number;
     }
   >,
   options: {
@@ -458,9 +482,16 @@ export function generateDailyParlay(
         c.decimalOdds <= maxIndividualOdds,
     )
     .sort((a, b) => {
-      // Score = modelProb * (1 + edge) * priorityWeight (tier de competición).
-      // El priorityWeight sólo influye en el orden, no en la matemática
-      // combinada que calcula `calculateParlay`.
+      // Tier primero (1 = Champions, mejor) — un partido Champions con 0.70
+      // prob debe ir antes que un partido de liga menor con 0.85 prob, porque
+      // la calidad del rival y la fiabilidad del modelo son superiores en
+      // competiciones top.
+      const tierA = a.priorityTier ?? 99;
+      const tierB = b.priorityTier ?? 99;
+      if (tierA !== tierB) return tierA - tierB;
+      // Score dentro del tier = modelProb × (1 + edge) × priorityWeight.
+      // priorityWeight sólo influye en el orden, no en la matemática combinada
+      // que calcula `calculateParlay`.
       const scoreA = (a.modelProb ?? 0) * (1 + (a.edge ?? 0)) * (a.priorityWeight ?? 1);
       const scoreB = (b.modelProb ?? 0) * (1 + (b.edge ?? 0)) * (b.priorityWeight ?? 1);
       return scoreB - scoreA;
