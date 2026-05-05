@@ -43,7 +43,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
     <header className="sticky top-0 z-50 h-16 w-full border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/90">
       <nav className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 lg:px-6">
         {/* Logo + EL PARLEY con difuminado negro como backdrop (detrás) */}
-        <Link href="/" className="relative flex items-center gap-2.5">
+        <a href="/" className="relative flex items-center gap-2.5">
           {/* Halo negro detrás del logo y el texto — no altera sus colores */}
           <span
             aria-hidden
@@ -63,7 +63,7 @@ export function NavbarClient({ isAuthenticated, isPremium }: NavbarClientProps) 
           >
             EL PARLEY
           </span>
-        </Link>
+        </a>
 
         {/* Desktop Navigation */}
         <div className="hidden items-center gap-1 md:flex">
