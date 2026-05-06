@@ -10,6 +10,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeBetplay, scrapeWplay } from "@/lib/scrapers/kambi";
+import { scrapePinnacle } from "@/lib/scrapers/pinnacle";
+import type { ScrapedOdd } from "@/lib/scrapers/types";
 import { ingestScrapedOdds, IngestError } from "@/lib/odds/ingest";
 import { notifyAdminError } from "@/lib/telegram/send";
 
@@ -25,8 +27,8 @@ interface SourceResult {
 }
 
 async function runSource(
-  source: "betplay" | "wplay",
-  scraper: () => Promise<Awaited<ReturnType<typeof scrapeBetplay>>>,
+  source: "betplay" | "wplay" | "pinnacle",
+  scraper: () => Promise<ScrapedOdd[]>,
 ): Promise<SourceResult> {
   try {
     const odds = await scraper();
@@ -56,15 +58,16 @@ export async function GET(req: NextRequest) {
 
   const startedAt = new Date().toISOString();
 
-  const [betplay, wplay] = await Promise.all([
+  const [betplay, wplay, pinnacle] = await Promise.all([
     runSource("betplay", scrapeBetplay),
     runSource("wplay", scrapeWplay),
+    runSource("pinnacle", scrapePinnacle),
   ]);
 
   return NextResponse.json({
     ok: true,
     startedAt,
     finishedAt: new Date().toISOString(),
-    sources: [betplay, wplay],
+    sources: [betplay, wplay, pinnacle],
   });
 }

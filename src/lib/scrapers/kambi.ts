@@ -8,25 +8,9 @@
  * secuenciales con un pequeño delay; Betplay puede ir en paralelo.
  */
 
-export type Market =
-  | "1x2"
-  | "over_under_2_5"
-  | "over_under_1_5"
-  | "btts"
-  | "double_chance"
-  | "asian_handicap"
-  | "draw_no_bet";
+import { type Market, type ScrapedOdd, colombiaDate } from "./types";
 
-export interface ScrapedOdd {
-  home_team: string;
-  away_team: string;
-  kickoff_date: string; // "YYYY-MM-DD" en hora Colombia (UTC-5)
-  market: Market;
-  selection: string;
-  price: number;
-  line: number | null;
-  is_live: boolean;
-}
+export type { Market, ScrapedOdd };
 
 const PARAMS = "lang=es_CO&market=CO&client_id=200&channel_id=1&ncid=1&useCombined=true";
 
@@ -68,10 +52,6 @@ interface KambiResponse {
     betOffers: KambiBetOffer[];
     liveData?: unknown;
   }>;
-}
-
-function colombiaDate(isoUtc: string): string {
-  return new Date(isoUtc).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
 }
 
 function parseEvents(data: KambiResponse, seenEventIds: Set<number>): ScrapedOdd[] {
@@ -131,6 +111,36 @@ function parseEvents(data: KambiResponse, seenEventIds: Set<number>): ScrapedOdd
           const selection = o.type === "OT_YES" ? "yes" : o.type === "OT_NO" ? "no" : null;
           if (!selection) continue;
           odds.push({ home_team: home, away_team: away, kickoff_date, market: "btts", selection, price, line: null, is_live: isLive });
+        }
+      }
+
+      // Double Chance — selection convention: "1x" | "12" | "x2" (alineado con api-football.ts)
+      if (label.includes("double chance") || label.includes("doble oportunidad")) {
+        for (const o of offer.outcomes) {
+          if (o.suspended) continue;
+          const price = o.odds / 1000;
+          if (price <= 1) continue;
+          const selection =
+            o.type === "OT_ONE_OR_CROSS" ? "1x" :
+            o.type === "OT_ONE_OR_TWO" ? "12" :
+            o.type === "OT_CROSS_OR_TWO" ? "x2" : null;
+          if (!selection) continue;
+          odds.push({ home_team: home, away_team: away, kickoff_date, market: "double_chance", selection, price, line: null, is_live: isLive });
+        }
+      }
+
+      // Draw No Bet — selection convention: "home" | "away"
+      if (label.includes("draw no bet") || label.includes("empate") || label.includes("reembolso por empate")) {
+        // Filtrar para no confundir con "Empate" del 1x2; el criterion específico de DNB
+        // suele decir "Draw No Bet" en englishLabel y solo tener 2 outcomes (sin draw).
+        if (offer.outcomes.length !== 2) continue;
+        for (const o of offer.outcomes) {
+          if (o.suspended) continue;
+          const price = o.odds / 1000;
+          if (price <= 1) continue;
+          const selection = o.type === "OT_ONE" ? "home" : o.type === "OT_TWO" ? "away" : null;
+          if (!selection) continue;
+          odds.push({ home_team: home, away_team: away, kickoff_date, market: "draw_no_bet", selection, price, line: null, is_live: isLive });
         }
       }
     }
