@@ -1,14 +1,18 @@
 /**
  * Scraper de cuotas de 1xbet vía la API pública LineFeed.
  *
+ * NOTA: Actualmente NO está conectado al cron porque desde IPs cloud
+ * (probado en Vercel São Paulo) la API responde Success:true pero filtra
+ * Value:[] silenciosamente. Desde IP residencial CO funciona OK.
+ * Reactivar en /api/cron/scrape-odds cuando exista proxy residencial
+ * o cuando este scraper corra desde una VPS/Pi residencial.
+ *
  * Endpoint que consume la web actual de 1xbet:
  *   https://1xbet.com/service-api/LineFeed/Get1x2_Zip?sports=1&...
  *
- * La respuesta es JSON plano (el sufijo "Zip" es legacy).
- *
  * Cada evento trae outcomes principales en `E[]` y mercados alternativos
- * agrupados en `AE[].ME[]`. Las líneas de over/under suelen vivir en `AE`
- * con G=17, así que iteramos ambos arrays y dedupe por (T, P).
+ * agrupados en `AE[].ME[]`. Las líneas de over/under viven en `AE` con
+ * G=17, así que iteramos ambos arrays y dedupe por (T, P).
  *
  * Códigos T conocidos:
  *    1 = Win 1 (home)        2 = Draw            3 = Win 2 (away)
@@ -16,11 +20,6 @@
  *    7 = Asian Handicap 1    8 = Asian Handicap 2
  *    9 = Total Over          10 = Total Under
  *  180 = Both Teams Yes    181 = Both Teams No
- *
- * Nota sobre IP: 1xbet rate-limita IPs cloud agresivamente.
- * Si Vercel devuelve 403/429 recurrente, considerar proxy residencial
- * o desactivar este source. País (`country`) y `lng` afectan qué
- * eventos devuelve por geo-blocking.
  */
 
 import { type ScrapedOdd, colombiaDate } from "./types";

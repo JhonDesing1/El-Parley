@@ -11,10 +11,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeBetplay, scrapeWplay } from "@/lib/scrapers/kambi";
 import { scrapePinnacle } from "@/lib/scrapers/pinnacle";
-import { scrape1xbet } from "@/lib/scrapers/1xbet";
 import type { ScrapedOdd } from "@/lib/scrapers/types";
 import { ingestScrapedOdds, IngestError } from "@/lib/odds/ingest";
 import { notifyAdminError } from "@/lib/telegram/send";
+
+// 1xbet desactivado: la API responde Success:true pero filtra Value:[]
+// desde IPs cloud (Vercel São Paulo). El scraper en src/lib/scrapers/1xbet.ts
+// queda listo para reactivar cuando exista proxy residencial.
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,7 +31,7 @@ interface SourceResult {
 }
 
 async function runSource(
-  source: "betplay" | "wplay" | "pinnacle" | "1xbet",
+  source: "betplay" | "wplay" | "pinnacle",
   scraper: () => Promise<ScrapedOdd[]>,
 ): Promise<SourceResult> {
   try {
@@ -59,17 +62,16 @@ export async function GET(req: NextRequest) {
 
   const startedAt = new Date().toISOString();
 
-  const [betplay, wplay, pinnacle, onexbet] = await Promise.all([
+  const [betplay, wplay, pinnacle] = await Promise.all([
     runSource("betplay", scrapeBetplay),
     runSource("wplay", scrapeWplay),
     runSource("pinnacle", scrapePinnacle),
-    runSource("1xbet", scrape1xbet),
   ]);
 
   return NextResponse.json({
     ok: true,
     startedAt,
     finishedAt: new Date().toISOString(),
-    sources: [betplay, wplay, pinnacle, onexbet],
+    sources: [betplay, wplay, pinnacle],
   });
 }
