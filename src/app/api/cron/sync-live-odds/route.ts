@@ -301,6 +301,7 @@ export async function GET(req: NextRequest) {
     oddsUpserted,
     valueBetsDetected,
     revalidated,
+    pinnacleBookmakerId,
     timestamp: now.toISOString(),
   });
 }
