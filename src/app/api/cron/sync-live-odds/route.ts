@@ -5,6 +5,12 @@ import { fetchOddsForFixtures, HIGH_PRIORITY_LEAGUE_IDS } from "@/lib/api/api-fo
 import { calculateMatchProbabilities } from "@/lib/betting/poisson";
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
 import { removeVigMultiplicative } from "@/lib/betting/implied-probability";
+import {
+  pinnacleFairProbs,
+  pinnacleFairKey,
+  pinnacleEdge,
+  type PinnacleOdd,
+} from "@/lib/betting/pinnacle-fair-odds";
 import { notifyAdminError } from "@/lib/telegram/send";
 
 /**
@@ -124,6 +130,7 @@ export async function GET(req: NextRequest) {
   const { data: bookmakerRows } = await supabase.from("bookmakers").select("id, slug");
   const slugToId: Record<string, number> = {};
   for (const b of bookmakerRows ?? []) slugToId[b.slug] = b.id;
+  const pinnacleBookmakerId = slugToId.pinnacle ?? null;
 
   const now = new Date();
   const in2h = new Date(now.getTime() + 2 * 3600 * 1000);
@@ -191,6 +198,21 @@ export async function GET(req: NextRequest) {
             return { matchId: m.id, odds: odds.length, newBets: 0 };
           }
 
+          // Pinnacle como referencia "fair" — mismo enriquecimiento que
+          // detect-value-bets pero inline para los hot matches.
+          const pinFairMap = pinnacleBookmakerId
+            ? pinnacleFairProbs(
+                currentOdds
+                  .filter((o) => o.bookmaker_id === pinnacleBookmakerId)
+                  .map<PinnacleOdd>((o) => ({
+                    market: o.market,
+                    selection: o.selection,
+                    line: o.line,
+                    price: o.price,
+                  })),
+              )
+            : new Map();
+
           const bets = [];
           for (const o of currentOdds) {
             const key = `${o.market}:${o.selection}` as MarketKey;
@@ -209,6 +231,16 @@ export async function GET(req: NextRequest) {
             }
             if (!result.isValue) continue;
 
+            let pinnacleFairProb: number | null = null;
+            let edgePinnacle: number | null = null;
+            if (pinnacleBookmakerId && o.bookmaker_id !== pinnacleBookmakerId) {
+              const fair = pinFairMap.get(pinnacleFairKey(o.market, o.selection, o.line));
+              if (fair != null) {
+                pinnacleFairProb = fair;
+                edgePinnacle = pinnacleEdge(o.price, fair);
+              }
+            }
+
             const modelProb = probGetter(probs);
             bets.push({
               match_id: m.id,
@@ -222,6 +254,8 @@ export async function GET(req: NextRequest) {
               edge: result.edge,
               kelly_fraction: result.kelly,
               confidence: result.confidence,
+              pinnacle_fair_prob: pinnacleFairProb,
+              edge_pinnacle: edgePinnacle,
               result: "pending" as const,
               is_premium: result.edge < 0.06,
               is_suggested: modelProb >= 0.65 && o.price >= 1.40,
