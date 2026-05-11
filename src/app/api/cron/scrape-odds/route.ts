@@ -20,7 +20,10 @@ import { notifyAdminError } from "@/lib/telegram/send";
 // queda listo para reactivar cuando exista proxy residencial.
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Pinnacle (sin primaryOnly + withSpecials) devuelve ~18MB de markets +
+// ~12MB de matchups, y la ingesta upsertea ~6.5k cuotas. 60s no alcanza
+// en la región gru1; con 300s (max del plan Pro de Vercel) hay margen.
+export const maxDuration = 300;
 
 interface SourceResult {
   source: string;
