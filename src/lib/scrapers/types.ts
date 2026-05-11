@@ -7,8 +7,9 @@
 
 export type Market =
   | "1x2"
-  | "over_under_2_5"
   | "over_under_1_5"
+  | "over_under_2_5"
+  | "over_under_3_5"
   | "btts"
   | "double_chance"
   | "asian_handicap"

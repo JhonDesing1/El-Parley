@@ -35,8 +35,9 @@ function teamSimilarity(a: string, b: string): number {
 export type IngestMarket =
   | "1x2"
   | "double_chance"
-  | "over_under_2_5"
   | "over_under_1_5"
+  | "over_under_2_5"
+  | "over_under_3_5"
   | "btts"
   | "asian_handicap"
   | "draw_no_bet";
