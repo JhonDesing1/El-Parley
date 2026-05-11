@@ -24,6 +24,8 @@ import { notifyAdminError } from "@/lib/telegram/send";
  */
 const MAX_EDGE_REASONABLE = 0.25;
 const MAX_DEVIATION_VS_MARKET = 0.20;
+/** Si Pinnacle dice que NO es value (edge < -2%), rechazamos. */
+const PINNACLE_MIN_EDGE_ACCEPT = -0.02;
 
 interface OddsForConsensus {
   bookmaker_id: number;
@@ -241,6 +243,10 @@ export async function GET(req: NextRequest) {
               }
             }
 
+            // Filtro de calibración: Pinnacle como autoridad cuando cotiza
+            // el mercado. Sin cuotas Pinnacle, mantenemos el modelo Poisson.
+            if (edgePinnacle != null && edgePinnacle < PINNACLE_MIN_EDGE_ACCEPT) continue;
+
             const modelProb = probGetter(probs);
             bets.push({
               match_id: m.id,
@@ -301,7 +307,6 @@ export async function GET(req: NextRequest) {
     oddsUpserted,
     valueBetsDetected,
     revalidated,
-    pinnacleBookmakerId,
     timestamp: now.toISOString(),
   });
 }

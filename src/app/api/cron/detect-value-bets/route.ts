@@ -98,6 +98,21 @@ const CARD_MARKET_PROB: Record<string, (p: CardProbabilities) => number> = {
 const MAX_EDGE_REASONABLE = 0.25;
 
 /**
+ * Calibración via Pinnacle: si el "precio justo" de Pinnacle dice que NO hay
+ * value (cuota_soft × pinnacle_fair < 1), descartamos el bet — el modelo
+ * Poisson estaba inflando la probabilidad. Damos un margen de 2pp para
+ * tolerar ruido de cierre (las cuotas se mueven entre que se ingestan y
+ * el bet se evalúa).
+ *
+ * Cuando Pinnacle NO cotiza ese mercado/match, mantenemos la lógica del
+ * modelo Poisson original — degradación grácil.
+ *
+ * Esto es el filtro "anti-fool's-value": Pinnacle, con margen ~2%, está
+ * lejos más cerca del precio eficiente que un Poisson genérico con xG.
+ */
+const PINNACLE_MIN_EDGE_ACCEPT = -0.02;
+
+/**
  * Desviación máxima (en pp) entre la probabilidad del modelo y la
  * probabilidad implícita "fair" del mercado (de-vigada). Si CUALQUIER
  * brazo del 1x2 supera esto, el modelo está mal calibrado para este
@@ -450,9 +465,7 @@ export async function GET(req: NextRequest) {
       }
       if (!result.isValue) continue;
 
-      // Enriquecer con benchmark de Pinnacle si está disponible. No filtra
-      // el bet: lo persiste para que la UI y los análisis posteriores
-      // puedan ponderar bets por edge_pinnacle (CLV anticipado).
+      // Enriquecer con benchmark de Pinnacle si está disponible.
       let pinnacleFairProb: number | null = null;
       let edgePinnacle: number | null = null;
       if (pinnacleBookmakerId && o.bookmaker_id !== pinnacleBookmakerId) {
@@ -462,6 +475,12 @@ export async function GET(req: NextRequest) {
           edgePinnacle = pinnacleEdge(o.price, fair);
         }
       }
+
+      // Filtro de calibración: si Pinnacle cotiza este mercado y dice
+      // que NO es value (edge_pinnacle < umbral), descartamos. El modelo
+      // Poisson estaba sobreestimando. Sin cuotas Pinnacle, se mantiene
+      // la lógica del modelo (degradación grácil).
+      if (edgePinnacle != null && edgePinnacle < PINNACLE_MIN_EDGE_ACCEPT) continue;
 
       bets.push({
         match_id: match.id,
