@@ -10,6 +10,12 @@ import {
 import { detectValueBet, buildReasoning } from "@/lib/betting/value-bet";
 import { removeVigMultiplicative } from "@/lib/betting/implied-probability";
 import {
+  pinnacleFairProbs,
+  pinnacleFairKey,
+  pinnacleEdge,
+  type PinnacleOdd,
+} from "@/lib/betting/pinnacle-fair-odds";
+import {
   LEAGUE_AVG_CORNERS,
   LEAGUE_AVG_CARDS,
   DEFAULT_CORNERS,
@@ -179,6 +185,16 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const in2h = new Date(now.getTime() + 2 * 3600 * 1000);
   const in48h = new Date(now.getTime() + 48 * 3600 * 1000);
+
+  // Pinnacle como benchmark de "precio justo". Se carga una vez al inicio
+  // del cron; si la fila no existe (DB local sin seed) o falla la query,
+  // simplemente no se calcula edge_pinnacle (no rompe el flujo).
+  const { data: pinBookmaker } = await supabase
+    .from("bookmakers")
+    .select("id")
+    .eq("slug", "pinnacle")
+    .maybeSingle();
+  const pinnacleBookmakerId = pinBookmaker?.id ?? null;
 
   // Limpia value_bets pendientes de mercados que ya no soportamos (1x2 y
   // hándicap asiático). Sin esto, los bets antiguos seguirían apareciendo
@@ -352,6 +368,23 @@ export async function GET(req: NextRequest) {
     const odds = oddsByMatch.get(match.id);
     if (!odds?.length) continue;
 
+    // ── Pinnacle como referencia de probabilidad fair ────────────────
+    // Si Pinnacle cotiza este partido, de-vigamos sus líneas. Luego, para
+    // cada bet de una soft book, calculamos edge_pinnacle = price * fair - 1.
+    // Es el "edge real" — mucho más fiable que el edge vs Poisson.
+    const pinFairMap = pinnacleBookmakerId
+      ? pinnacleFairProbs(
+          odds
+            .filter((o) => o.bookmaker_id === pinnacleBookmakerId)
+            .map<PinnacleOdd>((o) => ({
+              market: o.market,
+              selection: o.selection,
+              line: o.line,
+              price: o.price,
+            })),
+        )
+      : new Map();
+
     // ── Sanity check: ¿el modelo concuerda con el consenso del mercado? ──
     // Si nuestro xG produce probabilidades 1x2 muy alejadas de lo que cobran
     // los bookmakers (de-vigado), el xG es ruido — típicamente el fallback
@@ -417,6 +450,19 @@ export async function GET(req: NextRequest) {
       }
       if (!result.isValue) continue;
 
+      // Enriquecer con benchmark de Pinnacle si está disponible. No filtra
+      // el bet: lo persiste para que la UI y los análisis posteriores
+      // puedan ponderar bets por edge_pinnacle (CLV anticipado).
+      let pinnacleFairProb: number | null = null;
+      let edgePinnacle: number | null = null;
+      if (pinnacleBookmakerId && o.bookmaker_id !== pinnacleBookmakerId) {
+        const fair = pinFairMap.get(pinnacleFairKey(o.market, o.selection, o.line));
+        if (fair != null) {
+          pinnacleFairProb = fair;
+          edgePinnacle = pinnacleEdge(o.price, fair);
+        }
+      }
+
       bets.push({
         match_id: match.id,
         bookmaker_id: o.bookmaker_id,
@@ -431,6 +477,8 @@ export async function GET(req: NextRequest) {
         edge: result.edge,
         kelly_fraction: result.kelly,
         confidence: result.confidence,
+        pinnacle_fair_prob: pinnacleFairProb,
+        edge_pinnacle: edgePinnacle,
         result: "pending" as const,
         // Bets con edge muy alto (>6%) son visibles gratis; las moderadas son premium
         is_premium: result.edge < 0.06,

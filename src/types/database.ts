@@ -220,6 +220,63 @@ export type Database = {
         }
         Relationships: []
       }
+      clv_snapshots: {
+        Row: {
+          bet_fair_prob: number | null
+          bet_price: number
+          closing_fair_prob: number
+          clv: number
+          id: number
+          line: number | null
+          market: string
+          match_id: number
+          selection: string
+          snapshot_at: string
+          value_bet_id: number
+        }
+        Insert: {
+          bet_fair_prob?: number | null
+          bet_price: number
+          closing_fair_prob: number
+          clv: number
+          id?: number
+          line?: number | null
+          market: string
+          match_id: number
+          selection: string
+          snapshot_at?: string
+          value_bet_id: number
+        }
+        Update: {
+          bet_fair_prob?: number | null
+          bet_price?: number
+          closing_fair_prob?: number
+          clv?: number
+          id?: number
+          line?: number | null
+          market?: string
+          match_id?: number
+          selection?: string
+          snapshot_at?: string
+          value_bet_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clv_snapshots_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clv_snapshots_value_bet_id_fkey"
+            columns: ["value_bet_id"]
+            isOneToOne: true
+            referencedRelation: "value_bets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorites: {
         Row: {
           created_at: string | null
@@ -356,6 +413,47 @@ export type Database = {
         }
         Relationships: []
       }
+      match_stats: {
+        Row: {
+          away_corners: number | null
+          away_red_cards: number | null
+          away_yellow_cards: number | null
+          fetched_at: string
+          home_corners: number | null
+          home_red_cards: number | null
+          home_yellow_cards: number | null
+          match_id: number
+        }
+        Insert: {
+          away_corners?: number | null
+          away_red_cards?: number | null
+          away_yellow_cards?: number | null
+          fetched_at?: string
+          home_corners?: number | null
+          home_red_cards?: number | null
+          home_yellow_cards?: number | null
+          match_id: number
+        }
+        Update: {
+          away_corners?: number | null
+          away_red_cards?: number | null
+          away_yellow_cards?: number | null
+          fetched_at?: string
+          home_corners?: number | null
+          home_red_cards?: number | null
+          home_yellow_cards?: number | null
+          match_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_stats_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           away_score: number | null
@@ -452,47 +550,6 @@ export type Database = {
             columns: ["league_id"]
             isOneToOne: false
             referencedRelation: "leagues"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      match_stats: {
-        Row: {
-          match_id: number
-          home_corners: number | null
-          away_corners: number | null
-          home_yellow_cards: number | null
-          away_yellow_cards: number | null
-          home_red_cards: number | null
-          away_red_cards: number | null
-          fetched_at: string
-        }
-        Insert: {
-          match_id: number
-          home_corners?: number | null
-          away_corners?: number | null
-          home_yellow_cards?: number | null
-          away_yellow_cards?: number | null
-          home_red_cards?: number | null
-          away_red_cards?: number | null
-          fetched_at?: string
-        }
-        Update: {
-          match_id?: number
-          home_corners?: number | null
-          away_corners?: number | null
-          home_yellow_cards?: number | null
-          away_yellow_cards?: number | null
-          home_red_cards?: number | null
-          away_red_cards?: number | null
-          fetched_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "match_stats_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: true
-            referencedRelation: "matches"
             referencedColumns: ["id"]
           },
         ]
@@ -893,6 +950,44 @@ export type Database = {
           },
         ]
       }
+      team_stats: {
+        Row: {
+          avg_corners_against: number | null
+          avg_corners_for: number | null
+          avg_red_cards: number | null
+          avg_yellow_cards: number | null
+          matches_sample: number
+          team_id: number
+          updated_at: string
+        }
+        Insert: {
+          avg_corners_against?: number | null
+          avg_corners_for?: number | null
+          avg_red_cards?: number | null
+          avg_yellow_cards?: number | null
+          matches_sample?: number
+          team_id: number
+          updated_at?: string
+        }
+        Update: {
+          avg_corners_against?: number | null
+          avg_corners_for?: number | null
+          avg_red_cards?: number | null
+          avg_yellow_cards?: number | null
+          matches_sample?: number
+          team_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_stats_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: true
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           country: string | null
@@ -928,44 +1023,6 @@ export type Database = {
           venue?: string | null
         }
         Relationships: []
-      }
-      team_stats: {
-        Row: {
-          team_id: number
-          matches_sample: number
-          avg_corners_for: number | null
-          avg_corners_against: number | null
-          avg_yellow_cards: number | null
-          avg_red_cards: number | null
-          updated_at: string
-        }
-        Insert: {
-          team_id: number
-          matches_sample?: number
-          avg_corners_for?: number | null
-          avg_corners_against?: number | null
-          avg_yellow_cards?: number | null
-          avg_red_cards?: number | null
-          updated_at?: string
-        }
-        Update: {
-          team_id?: number
-          matches_sample?: number
-          avg_corners_for?: number | null
-          avg_corners_against?: number | null
-          avg_yellow_cards?: number | null
-          avg_red_cards?: number | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "team_stats_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: true
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       tipster_picks: {
         Row: {
@@ -1297,6 +1354,7 @@ export type Database = {
           confidence: string | null
           detected_at: string | null
           edge: number
+          edge_pinnacle: number | null
           id: number
           implied_prob: number
           is_premium: boolean | null
@@ -1306,6 +1364,7 @@ export type Database = {
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
           model_prob: number
+          pinnacle_fair_prob: number | null
           price: number
           reasoning: string | null
           result: string | null
@@ -1316,6 +1375,7 @@ export type Database = {
           confidence?: string | null
           detected_at?: string | null
           edge: number
+          edge_pinnacle?: number | null
           id?: number
           implied_prob: number
           is_premium?: boolean | null
@@ -1325,6 +1385,7 @@ export type Database = {
           market: Database["public"]["Enums"]["market_type"]
           match_id: number
           model_prob: number
+          pinnacle_fair_prob?: number | null
           price: number
           reasoning?: string | null
           result?: string | null
@@ -1335,6 +1396,7 @@ export type Database = {
           confidence?: string | null
           detected_at?: string | null
           edge?: number
+          edge_pinnacle?: number | null
           id?: number
           implied_prob?: number
           is_premium?: boolean | null
@@ -1344,6 +1406,7 @@ export type Database = {
           market?: Database["public"]["Enums"]["market_type"]
           match_id?: number
           model_prob?: number
+          pinnacle_fair_prob?: number | null
           price?: number
           reasoning?: string | null
           result?: string | null
