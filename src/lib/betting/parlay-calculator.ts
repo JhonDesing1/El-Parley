@@ -136,15 +136,16 @@ export function generateValueParlay(
     maxIndividualOdds?: number;
   } = {},
 ): ParlayLeg[] | null {
-  // Defaults coherentes: con minIndividualProb=0.82 y 2 piernas la combinada
-  // máxima es 0.67 — exigir 0.80 hacía que esta función nunca devolviera
-  // parlay. Bajamos el suelo a 0.65 para que matemáticamente sea alcanzable
-  // y mantenemos el filtro individual estricto.
+  // Defaults coherentes: con minIndividualProb=0.75 y 2 piernas la combinada
+  // máxima es ~0.56, así que minCombinedProb 0.55 es alcanzable. Subir
+  // minIndividualProb a 0.82+ con 2 piernas hacía que la función casi nunca
+  // devolviera parlay (los bets con prob ≥0.82 son raros incluso en favoritos
+  // claros — la combinatoria mata el yield).
   const {
     targetOdds = 3.5,
-    minCombinedProb = 0.65,
-    minIndividualProb = 0.82,
-    maxIndividualOdds = 1.50,
+    minCombinedProb = 0.55,
+    minIndividualProb = 0.75,
+    maxIndividualOdds = 1.65,
   } = options;
 
   // priorityTier (1 = Champions, mejor) ordena primero — Champions y demás
@@ -241,10 +242,10 @@ export function generateFunBet(
     targetOdds = 12,
     minLegs = 4,
     maxLegs = 10,
-    minIndividualProb = 0.65,
-    minIndividualOdds = 1.25,
-    maxIndividualOdds = 1.70,
-    minCombinedProb = 0.10,
+    minIndividualProb = 0.55,
+    minIndividualOdds = 1.20,
+    maxIndividualOdds = 1.85,
+    minCombinedProb = 0.08,
   } = options;
 
   // Deduplicar por matchId (un único bet por partido)
@@ -333,15 +334,14 @@ export function generatePremium90Parlays(
   >,
   count = 4,
 ): ParlayLeg[][] {
-  const MIN_COMBINED_PROB = 0.90;
-  const MIN_TOTAL_ODDS = 1.60;
-  const MIN_INDIVIDUAL_PROB = 0.88;
-  // Tope de cuota por pierna: con prob ≥ 0.88 la cuota fair máxima es 1.136.
-  // Con el cap de edge del modelo (0.25) la cuota real máxima esperable es
-  // ~1.42. Ponemos 1.40 como techo duro para evitar que una pierna con
-  // prob=0.88 pero cuota=1.80 (escenario raro pero posible con xG legacy)
-  // se cuele en una "Combinada 90%".
-  const MAX_INDIVIDUAL_ODDS = 1.40;
+  // Antes: 0.90/0.88/1.60/1.40 — combinatoriamente casi imposible (dos piernas
+  // a 0.88 dan combinada 0.77, abajo del 0.90). El nombre "Combinada 90%" es
+  // marketing; lo que importa es probabilidad combinada alta y cuota ≥ 1.50.
+  // Con estos defaults dos piernas a 0.82 combinan ~0.67, totales ~1.55-1.85.
+  const MIN_COMBINED_PROB = 0.65;
+  const MIN_TOTAL_ODDS = 1.50;
+  const MIN_INDIVIDUAL_PROB = 0.78;
+  const MAX_INDIVIDUAL_ODDS = 1.60;
 
   // Pre-orden por tier de competición primero (Champions encabeza), luego por
   // modelProb × priorityWeight dentro del mismo tier. Así el pool de top-25 que
@@ -470,14 +470,14 @@ export function generateDailyParlay(
     maxIndividualOdds = 1.80,
   } = options;
 
-  // Solo high/medium confidence; prob individual ≥ piso; cuota individual ≤ techo.
-  // El piso a 0.65 reemplaza el viejo 0.55: evita que una pierna con 56% de
-  // probabilidad (cuota fair ~1.78) entre como pierna "segura" en una
-  // combinada que el usuario espera de bankers.
+  // Filtro por prob individual ≥ piso y cuota ≤ techo. NO usamos
+  // `confidence` aquí: el etiquetado "low/medium/high" se basa en edge y un
+  // bet con edge 4% pero prob 0.80 es perfectamente válido como pierna de
+  // banker — la prob individual es la métrica relevante para combinadas
+  // seguras, no el edge.
   const filtered = candidates
     .filter(
       (c) =>
-        c.confidence !== "low" &&
         (c.modelProb ?? 0) >= minIndividualProb &&
         c.decimalOdds <= maxIndividualOdds,
     )

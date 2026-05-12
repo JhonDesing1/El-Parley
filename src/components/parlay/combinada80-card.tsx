@@ -42,14 +42,14 @@ export function Combinada80Card({ parlay }: { parlay: Parlay }) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-lg font-bold uppercase tracking-tight">
-                  Combinada 80%
+                  Combinada Segura
                 </span>
                 <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                  0.{probPct} acertadas
+                  {probPct}% prob.
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Probabilidad combinada del modelo ≥ 80%
+                Selecciones de alta probabilidad — cada pierna es un banker
               </p>
             </div>
           </div>

@@ -100,28 +100,31 @@ const MAX_EDGE_REASONABLE = 0.25;
 /**
  * Calibración via Pinnacle: si el "precio justo" de Pinnacle dice que NO hay
  * value (cuota_soft × pinnacle_fair < 1), descartamos el bet — el modelo
- * Poisson estaba inflando la probabilidad. Damos un margen de 2pp para
- * tolerar ruido de cierre (las cuotas se mueven entre que se ingestan y
- * el bet se evalúa).
+ * Poisson estaba inflando la probabilidad. Margen de 5pp para tolerar el
+ * ruido del de-vig multiplicativo (especialmente en 3-vías) y el movimiento
+ * de cuotas entre ingesta y evaluación. A -2pp el filtro descartaba el
+ * grueso de los bets legítimos.
  *
  * Cuando Pinnacle NO cotiza ese mercado/match, mantenemos la lógica del
  * modelo Poisson original — degradación grácil.
  *
  * Esto es el filtro "anti-fool's-value": Pinnacle, con margen ~2%, está
- * lejos más cerca del precio eficiente que un Poisson genérico con xG.
+ * mucho más cerca del precio eficiente que un Poisson genérico con xG.
  */
-const PINNACLE_MIN_EDGE_ACCEPT = -0.02;
+const PINNACLE_MIN_EDGE_ACCEPT = -0.05;
 
 /**
- * Desviación máxima (en pp) entre la probabilidad del modelo y la
- * probabilidad implícita "fair" del mercado (de-vigada). Si CUALQUIER
- * brazo del 1x2 supera esto, el modelo está mal calibrado para este
- * partido y rechazamos los mercados derivados de xG.
+ * Desviación máxima permitida entre el modelo y el consenso del mercado
+ * (de-vigado). Usamos la desviación PROMEDIO de los tres brazos del 1x2;
+ * un único brazo descalibrado puede deberse a ruido del de-vig en cuotas
+ * extremas (visitante a 8.00, p.ej.) y no implica que todo el modelo esté
+ * mal.
  *
- * 0.20 (20pp) tolera la ventaja real del modelo Poisson sin permitir
- * disparates como el bug del Pereira (modelo decía 71% DC1X, mercado decía 35%).
+ * 0.18 (18pp de promedio) detecta los casos reales de modelo roto —como
+ * el bug del Pereira con DC1X 71% vs 35% del mercado, que daría promedio
+ * ~20pp— sin matar todos los partidos donde un solo brazo se desvía.
  */
-const MAX_MODEL_VS_MARKET_DEVIATION = 0.20;
+const MAX_MODEL_VS_MARKET_DEVIATION = 0.18;
 
 interface OddsRowLike {
   bookmaker_id: number;
@@ -160,22 +163,28 @@ function marketConsensus1x2(
 }
 
 /**
- * Verdadero si el modelo se aleja del consenso del mercado en cualquiera
- * de los tres brazos por más de MAX_MODEL_VS_MARKET_DEVIATION.
+ * Verdadero si el modelo se aleja del consenso del mercado, medido como la
+ * desviación PROMEDIO de los tres brazos del 1x2.
  *
- * Caso típico: con xG fallback (1.40, 1.10) el Poisson estima local≈45%
- * sin importar el equipo. El mercado, que sí distingue, paga al
- * último de la tabla a 6.50 (15% implícito). Diferencia: 30pp → flag.
+ * Caso típico que detecta: con xG fallback (1.40, 1.10) el Poisson estima
+ * local≈45% sin importar el equipo. El mercado paga al último de la tabla
+ * a 6.50 (15% implícito). Desviaciones: ~30pp en home, ~5pp en draw, ~25pp
+ * en away → promedio ~20pp → flag.
+ *
+ * Promedio (no máximo) tolera ruido en un único brazo: el de-vig
+ * multiplicativo puede desviar 10-15pp en visitantes a cuota 6+, lo que
+ * antes mataba todos los mercados xG-derivados del partido sin razón.
  */
 function modelFar1x2(
   model: { home: number; draw: number; away: number },
   market: { home: number; draw: number; away: number },
 ): boolean {
-  return (
-    Math.abs(model.home - market.home) > MAX_MODEL_VS_MARKET_DEVIATION ||
-    Math.abs(model.draw - market.draw) > MAX_MODEL_VS_MARKET_DEVIATION ||
-    Math.abs(model.away - market.away) > MAX_MODEL_VS_MARKET_DEVIATION
-  );
+  const avgDev =
+    (Math.abs(model.home - market.home) +
+      Math.abs(model.draw - market.draw) +
+      Math.abs(model.away - market.away)) /
+    3;
+  return avgDev > MAX_MODEL_VS_MARKET_DEVIATION;
 }
 
 /** Mercados cuyo modelo depende directamente de xG (afectados por el sanity check). */
@@ -329,6 +338,30 @@ export async function GET(req: NextRequest) {
   const allNewBets: ValueBetInsert[] = [];
   const touchedMatchIds = new Set<number>();
 
+  // Telemetría: contar por qué se descarta cada candidato. Sin esto el cron
+  // devuelve sólo "valueBetsDetected: 0" y no se distingue "no hay cuotas"
+  // de "Pinnacle filtró todo" o "xG no fiable" — diagnóstico ciego.
+  const drops = {
+    noOdds: 0,
+    xgUntrustworthy: 0,
+    unmappedMarket: 0,
+    notValue: 0,
+    pinnacleRejected: 0,
+    detectThrew: 0,
+  };
+  // Detalle por partido (top 20 por relevancia) para inspección rápida.
+  const perMatch: Array<{
+    matchId: number;
+    leagueId: number | null;
+    xgHome: number;
+    xgAway: number;
+    oddsCount: number;
+    xgUntrustworthy: boolean;
+    consensus: { home: number; draw: number; away: number } | null;
+    accepted: number;
+    drops: { notValue: number; pinnacleRejected: number; xgBlocked: number };
+  }> = [];
+
   for (const match of matches) {
     const xgHome = match.model_expected_goals_home!;
     const xgAway = match.model_expected_goals_away!;
@@ -381,7 +414,10 @@ export async function GET(req: NextRequest) {
     const cardAvg   = { home: cardHomeExpected,   away: cardAwayExpected   };
 
     const odds = oddsByMatch.get(match.id);
-    if (!odds?.length) continue;
+    if (!odds?.length) {
+      drops.noOdds++;
+      continue;
+    }
 
     // ── Pinnacle como referencia de probabilidad fair ────────────────
     // Si Pinnacle cotiza este partido, de-vigamos sus líneas. Luego, para
@@ -415,6 +451,7 @@ export async function GET(req: NextRequest) {
       );
 
     const bets: ValueBetInsert[] = [];
+    const matchDrops = { notValue: 0, pinnacleRejected: 0, xgBlocked: 0 };
 
     for (const o of odds) {
       let modelProb: number | undefined;
@@ -426,7 +463,11 @@ export async function GET(req: NextRequest) {
       if (goalKey in GOAL_MARKET_PROB) {
         // Si el xG no concuerda con el mercado, omitimos cualquier mercado
         // derivado de él — la causa del bug "gana o empata Pereira".
-        if (xgUntrustworthy && isXgDerivedMarket(o.market)) continue;
+        if (xgUntrustworthy && isXgDerivedMarket(o.market)) {
+          drops.xgUntrustworthy++;
+          matchDrops.xgBlocked++;
+          continue;
+        }
         modelProb = GOAL_MARKET_PROB[goalKey](goalProbs);
       }
 
@@ -451,7 +492,10 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      if (modelProb === undefined) continue;
+      if (modelProb === undefined) {
+        drops.unmappedMarket++;
+        continue;
+      }
 
       let result;
       try {
@@ -461,9 +505,14 @@ export async function GET(req: NextRequest) {
           maxEdge: MAX_EDGE_REASONABLE,
         });
       } catch {
+        drops.detectThrew++;
         continue;
       }
-      if (!result.isValue) continue;
+      if (!result.isValue) {
+        drops.notValue++;
+        matchDrops.notValue++;
+        continue;
+      }
 
       // Enriquecer con benchmark de Pinnacle si está disponible.
       let pinnacleFairProb: number | null = null;
@@ -480,7 +529,11 @@ export async function GET(req: NextRequest) {
       // que NO es value (edge_pinnacle < umbral), descartamos. El modelo
       // Poisson estaba sobreestimando. Sin cuotas Pinnacle, se mantiene
       // la lógica del modelo (degradación grácil).
-      if (edgePinnacle != null && edgePinnacle < PINNACLE_MIN_EDGE_ACCEPT) continue;
+      if (edgePinnacle != null && edgePinnacle < PINNACLE_MIN_EDGE_ACCEPT) {
+        drops.pinnacleRejected++;
+        matchDrops.pinnacleRejected++;
+        continue;
+      }
 
       bets.push({
         match_id: match.id,
@@ -520,6 +573,18 @@ export async function GET(req: NextRequest) {
       touchedMatchIds.add(match.id);
       allNewBets.push(...bets);
     }
+
+    perMatch.push({
+      matchId: match.id,
+      leagueId: match.league_id ?? null,
+      xgHome,
+      xgAway,
+      oddsCount: odds.length,
+      xgUntrustworthy,
+      consensus,
+      accepted: bets.length,
+      drops: matchDrops,
+    });
   }
 
   // Reemplazo atómico-por-batch: un único delete (todos los matches tocados)
@@ -548,10 +613,24 @@ export async function GET(req: NextRequest) {
     await notifyProUsers(msg, "value_bets");
   }
 
+  // Orden por relevancia: primero los que aceptaron bets, después los que
+  // descartaron más candidatos. Top 20 cabe holgado en una respuesta JSON
+  // sin saturar logs de Vercel.
+  const perMatchTop = [...perMatch]
+    .sort((a, b) => {
+      if (b.accepted !== a.accepted) return b.accepted - a.accepted;
+      const aDrops = a.drops.notValue + a.drops.pinnacleRejected + a.drops.xgBlocked;
+      const bDrops = b.drops.notValue + b.drops.pinnacleRejected + b.drops.xgBlocked;
+      return bDrops - aDrops;
+    })
+    .slice(0, 20);
+
   return NextResponse.json({
     ok: true,
     matchesScanned: matches.length,
     valueBetsDetected: detected,
+    drops,
+    perMatch: perMatchTop,
     timestamp: now.toISOString(),
   });
 }

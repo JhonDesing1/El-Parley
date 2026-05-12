@@ -33,7 +33,8 @@ export function Combinada90Card({ parlay, isLocked = false }: Combinada90CardPro
     ? formatValidUntil((parlay as any).valid_until)
     : null;
 
-  // Extraer número de la combinada del título (#1, #2…)
+  // El título nuevo viene como "Combinada Premium XX% · x…" (sin #N).
+  // Mantenemos el extracción de #N para los parlays viejos que sigan en BD.
   const numMatch = (parlay.title as string).match(/#(\d+)/);
   const num = numMatch ? numMatch[1] : null;
 
@@ -57,14 +58,14 @@ export function Combinada90Card({ parlay, isLocked = false }: Combinada90CardPro
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-lg font-bold uppercase tracking-tight">
-                  Combinada 90%{num ? ` #${num}` : ""}
+                  Combinada Premium{num ? ` #${num}` : ""}
                 </span>
                 <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
                   {probPct}% prob.
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Probabilidad combinada ≥ 90% · ganancia ≥ 0.60
+                Mayor probabilidad × cuota disponible · ganancia ≥ 0.50
               </p>
             </div>
           </div>

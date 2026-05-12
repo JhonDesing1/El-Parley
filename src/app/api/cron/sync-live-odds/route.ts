@@ -15,17 +15,21 @@ import { notifyAdminError } from "@/lib/telegram/send";
 
 /**
  * Sanity check vs consenso del mercado. Si el modelo Poisson (basado en xG)
- * produce probabilidades 1x2 que difieren del de-vig promedio de los bookmakers
- * por más de MAX_DEVIATION en cualquier brazo, asumimos que el xG está mal
- * (típicamente, el fallback genérico de liga aplicado a un equipo débil) y
- * omitimos los mercados derivados de xG.
+ * produce probabilidades 1x2 cuyo promedio de desviación contra el de-vig
+ * de los bookmakers supera MAX_DEVIATION, asumimos que el xG está mal
+ * (típicamente, el fallback genérico de liga) y omitimos mercados xG.
  *
  * Edge >25% en mercados líquidos casi nunca es valor real: descartamos.
  */
 const MAX_EDGE_REASONABLE = 0.25;
-const MAX_DEVIATION_VS_MARKET = 0.20;
-/** Si Pinnacle dice que NO es value (edge < -2%), rechazamos. */
-const PINNACLE_MIN_EDGE_ACCEPT = -0.02;
+const MAX_DEVIATION_VS_MARKET = 0.18;
+/**
+ * Si Pinnacle dice que NO es value descartamos. Margen de 5pp tolera el
+ * ruido del de-vig multiplicativo y el movimiento de cuotas entre ingesta
+ * y evaluación; a -2pp el filtro era demasiado estricto y mataba el grueso
+ * de los bets legítimos.
+ */
+const PINNACLE_MIN_EDGE_ACCEPT = -0.05;
 
 interface OddsForConsensus {
   bookmaker_id: number;
@@ -60,11 +64,12 @@ function modelFar1x2(
   m: { home: number; draw: number; away: number },
   c: { home: number; draw: number; away: number },
 ): boolean {
-  return (
-    Math.abs(m.home - c.home) > MAX_DEVIATION_VS_MARKET ||
-    Math.abs(m.draw - c.draw) > MAX_DEVIATION_VS_MARKET ||
-    Math.abs(m.away - c.away) > MAX_DEVIATION_VS_MARKET
-  );
+  const avgDev =
+    (Math.abs(m.home - c.home) +
+      Math.abs(m.draw - c.draw) +
+      Math.abs(m.away - c.away)) /
+    3;
+  return avgDev > MAX_DEVIATION_VS_MARKET;
 }
 
 export const dynamic = "force-dynamic";

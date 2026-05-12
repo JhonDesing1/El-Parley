@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet, generatePremium90Parlays } from "@/lib/betting/parlay-calculator";
+import { calculateParlay, generateDailyParlay, generateValueParlay, generateFunBet, generatePremium90Parlays, type ParlayLeg } from "@/lib/betting/parlay-calculator";
 import { marketRank, marketWeight } from "@/lib/betting/market-priority";
 import { leagueTier, leagueWeight, CHAMPIONS_LEAGUE_ID } from "@/lib/betting/league-priority";
 import type { Database } from "@/types/database";
@@ -176,14 +176,16 @@ export async function GET(req: NextRequest) {
     "cards_over_under",
   ];
 
-  // Pending value bets for those matches (medium or high confidence only)
+  // Pending value bets for those matches. NO filtramos por confidence aquí:
+  // los generadores tienen filtros propios de minIndividualProb que son una
+  // métrica de calidad más relevante para parlays (un bet "low" de 3-5% edge
+  // pero con modelProb 0.85 es perfecto para una Combinada Segura).
   const { data: valueBets, error: vbErr } = await supabase
     .from("value_bets")
     .select(
       "id, match_id, bookmaker_id, market, selection, price, model_prob, edge, confidence, is_premium",
     )
     .eq("result", "pending")
-    .in("confidence", ["medium", "high"])
     .in("market", ALLOWED_PARLAY_MARKETS)
     .in("match_id", matchIds);
 
@@ -247,6 +249,33 @@ export async function GET(req: NextRequest) {
   ).length;
 
   const generatedIds: string[] = [];
+
+  // Telemetría por generador: distingue "no se generó porque no había
+  // candidatos" de "no se generó porque los thresholds eran demasiado
+  // estrictos para los candidatos disponibles". Sin esto, el cron devuelve
+  // sólo "generated: 0" y no se sabe por qué.
+  const telemetry: Record<
+    string,
+    { ok: boolean; legs: number; reason?: string; minLegs?: number; available?: number }
+  > = {};
+  const recordGenerator = (
+    name: string,
+    legs: ParlayLeg[] | null,
+    minLegs: number,
+    available: number,
+  ) => {
+    if (!legs) {
+      telemetry[name] = {
+        ok: false,
+        legs: 0,
+        reason: available < minLegs ? "too few candidates" : "thresholds not met",
+        minLegs,
+        available,
+      };
+      return;
+    }
+    telemetry[name] = { ok: true, legs: legs.length };
+  };
 
   // Helper: insert a parlay + its legs into the DB
   async function insertParlay(
@@ -335,12 +364,14 @@ export async function GET(req: NextRequest) {
   const freeLegs = generateDailyParlay(freeCandidates, {
     minLegs: 2,
     maxLegs: 3,
-    minCombinedProb: 0.40,
-    minIndividualProb: 0.70,
-    // Free parlay = "todas las piernas son seguras". Cap duro a 1.70
-    // (≈ 59% prob fair) para evitar mezclar un banker con un moonshot.
-    maxIndividualOdds: 1.70,
+    minCombinedProb: 0.35,
+    minIndividualProb: 0.62,
+    // Free parlay = "todas las piernas son seguras". Cap a 1.85
+    // (≈ 54% prob fair) — un techo más generoso que 1.70 amplía el pool
+    // de bankers sin meternos en territorio especulativo.
+    maxIndividualOdds: 1.85,
   });
+  recordGenerator("free", freeLegs, 2, freeCandidates.length);
 
   const usedMatchIds = new Set<number>();
 
@@ -388,14 +419,15 @@ export async function GET(req: NextRequest) {
   const premiumLegs = generateDailyParlay(premiumCandidates, {
     minLegs: 3,
     maxLegs: 5,
-    minCombinedProb: 0.25,
-    minIndividualProb: 0.65,
+    minCombinedProb: 0.20,
+    minIndividualProb: 0.55,
     // Premium permite un poco más de cuota por pierna que el free, pero
-    // sin moonshots: el techo a 1.90 mantiene cada pierna en zona "favorito"
-    // (≥ ~53% fair) y el producto se hace por número de piernas, no por una
-    // pata especulativa.
-    maxIndividualOdds: 1.90,
+    // sin moonshots. El techo a 2.10 mantiene cada pierna en zona
+    // "favorito o ligera ventaja" (≥ ~48% fair) y el producto sale del
+    // número de piernas, no de una pata especulativa.
+    maxIndividualOdds: 2.10,
   });
+  recordGenerator("premium", premiumLegs, 3, premiumCandidates.length);
 
   if (premiumLegs && premiumLegs.length >= 2) {
     const premiumWithMeta = premiumLegs.map(
@@ -439,21 +471,18 @@ export async function GET(req: NextRequest) {
       return sb - sa;
     });
 
-  // Combinada 80%: con prob individual ≥0.82 sobre 2 piernas la combinada
-  // máxima posible es ~0.67 — exigir 0.80 hacía que esta combinada nunca se
-  // generara. Bajamos minCombinedProb a 0.65 (≈ x1.54 fair odds) para que
-  // sea matemáticamente alcanzable, y subimos minIndividualProb a 0.85 para
-  // mantener la calidad por pierna.
+  // Combinada Segura: prob individual ≥0.72 (cuota fair ~1.39) y combinada
+  // ≥0.50 (≈ x2.0 fair). Con 3 piernas a 0.78 promedio combina ~0.47, target
+  // típico 2 piernas a 0.78-0.85 → combinada 0.60-0.70 y total ~3-3.8x.
   const combinada80Legs = generateValueParlay(combinada80Candidates, {
     targetOdds: 3.5,
-    minCombinedProb: 0.65,
-    minIndividualProb: 0.85,
-    // Cuota fair para prob 0.85 = 1.176; con edge típico real (5-15%) la
-    // cuota ofrecida sube a ~1.20-1.35. Cap a 1.45 evita aceptar piernas de
-    // alta prob pero cuota inflada (que serían más síntoma de modelo
-    // descalibrado que de valor real).
-    maxIndividualOdds: 1.45,
+    minCombinedProb: 0.50,
+    minIndividualProb: 0.72,
+    // Cap a 1.65: prob fair 0.65, deja espacio a piernas con edge real
+    // sin meter favoritos a cuota 2 (donde la promesa de "segura" se rompe).
+    maxIndividualOdds: 1.65,
   });
+  recordGenerator("combinadaSegura", combinada80Legs, 2, combinada80Candidates.length);
 
   if (combinada80Legs && combinada80Legs.length >= 2) {
     const c80WithMeta = combinada80Legs.map(
@@ -478,8 +507,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Combinadas 90% Premium: 4 combinadas con prob ≥ 90% y cuota ≥ 1.60 ─────
+  // ── Combinadas Premium: 4 combinadas con la mayor prob × cuota disponible.
+  // El % real (típicamente 65-85%) sale en el título — antes era hardcoded a
+  // "90%" pero el umbral original era casi inalcanzable y no se generaba ninguna.
   const premium90Combos = generatePremium90Parlays(allCandidates, 4);
+  telemetry.combinadaPremium = {
+    ok: premium90Combos.length > 0,
+    legs: premium90Combos.reduce((s, c) => s + c.length, 0),
+    reason:
+      premium90Combos.length === 0
+        ? allCandidates.length < 2
+          ? "too few candidates"
+          : "thresholds not met"
+        : undefined,
+    minLegs: 2,
+    available: allCandidates.length,
+  };
 
   for (let idx = 0; idx < premium90Combos.length; idx++) {
     const legs90 = premium90Combos[idx];
@@ -494,7 +537,7 @@ export async function GET(req: NextRequest) {
 
     const id = await insertParlay(
       with90Meta,
-      `Combinada 90% #${idx + 1} · x${totalOdds90.toFixed(2)}`,
+      `Combinada Premium ${(combinedProb90 * 100).toFixed(0)}% · x${totalOdds90.toFixed(2)}`,
       `${legs90.length} selecciones con ${(combinedProb90 * 100).toFixed(0)}% de probabilidad combinada y cuota x${totalOdds90.toFixed(2)}.`,
       "premium",
     );
@@ -511,11 +554,12 @@ export async function GET(req: NextRequest) {
     targetOdds: 12,
     minLegs: 4,
     maxLegs: 10,
-    minIndividualProb: 0.60,
-    minIndividualOdds: 1.25,
-    maxIndividualOdds: 1.75,
-    minCombinedProb: 0.10,
+    minIndividualProb: 0.55,
+    minIndividualOdds: 1.20,
+    maxIndividualOdds: 1.85,
+    minCombinedProb: 0.08,
   });
+  recordGenerator("funBet", funBetLegs, 4, allCandidates.length);
 
   if (funBetLegs && funBetLegs.length >= 4) {
     const funWithMeta = funBetLegs.map(
@@ -551,7 +595,9 @@ export async function GET(req: NextRequest) {
     generated: generatedIds.length,
     parlayIds: generatedIds,
     candidatesEvaluated: allCandidates.length,
+    pendingValueBets: valueBets.length,
     championsCandidates: championsCount,
+    telemetry,
     timestamp: now.toISOString(),
   });
 }

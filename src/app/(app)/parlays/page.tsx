@@ -42,10 +42,18 @@ export default async function ParlaysPage() {
     .gte("valid_until", new Date().toISOString())
     .order("created_at", { ascending: false });
 
-  // Separar por tipo usando la convención de título
+  // Separar por tipo usando la convención de título. Aceptamos los nombres
+  // viejos ("Combinada 80%/90%") y los actuales ("Combinada Segura/Premium")
+  // para no perder parlays viejos que sigan en BD durante el rollover.
   const isFunBet = (p: any) => (p.title as string)?.startsWith("FunBet");
-  const isCombi80 = (p: any) => (p.title as string)?.startsWith("Combinada 80%");
-  const isCombi90 = (p: any) => (p.title as string)?.startsWith("Combinada 90%");
+  const isCombi80 = (p: any) => {
+    const t = (p.title as string) ?? "";
+    return t.startsWith("Combinada Segura") || t.startsWith("Combinada 80%");
+  };
+  const isCombi90 = (p: any) => {
+    const t = (p.title as string) ?? "";
+    return t.startsWith("Combinada Premium") || t.startsWith("Combinada 90%");
+  };
 
   const allFunBets = (parlays ?? []).filter(isFunBet);
   const allCombinadas80 = (parlays ?? []).filter(isCombi80);
